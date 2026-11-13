@@ -34,9 +34,11 @@ body {
 }
 
 body.dark {
-  background: radial-gradient(90% 70% at 50% 45%, #150a2e 0%, #08040f 55%, #040208 100%);
+  background: #010004;
   color: #fff;
 }
+
+body.dark .bg-glow { opacity: 0; }
 
 #scene {
   position: absolute;
