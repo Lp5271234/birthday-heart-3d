@@ -66,7 +66,9 @@
 </div>
 
 <div id="videoStage" class="video-stage" hidden>
-  <video id="introVideo" playsinline preload="auto" src="assets/intro.mp4"></video>
+  <video id="introVideo" playsinline webkit-playsinline disablepictureinpicture
+         controlslist="nodownload nofullscreen noremoteplayback"
+         preload="auto" src="assets/intro.mp4"></video>
 </div>
 
 <div id="blackout" class="blackout" aria-hidden="true"></div>
