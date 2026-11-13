@@ -10,9 +10,14 @@ import { createCake } from './cake.js';
 const CFG = window.BIRTHDAY_CONFIG || {};
 const cards = CFG.cards || [{ short: '生日快乐', full: '生日快乐' }];
 
-const isMobile =
+const qs = new URLSearchParams(location.search);
+
+// device=mobile / device=pc 可强制切换版本；不填则自动识别
+const forceDevice = qs.get('device') || qs.get('v');
+const autoMobile =
   matchMedia('(max-width: 820px)').matches ||
   /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+const isMobile = forceDevice ? /^(m|mobile|phone)$/i.test(forceDevice) : autoMobile;
 
 const NOTE_COUNT = isMobile ? 38 : 54;
 const HEART_SCALE = isMobile ? 2.62 : 3.30;
@@ -42,7 +47,6 @@ const dom = {
 };
 
 // ---------- 配置文案注入 ----------
-const qs = new URLSearchParams(location.search);
 const toName = qs.get('to') || CFG.to || '朋友';
 const fromName = qs.get('from') || CFG.from || '我';
 dom.gateTo.textContent = toName;
