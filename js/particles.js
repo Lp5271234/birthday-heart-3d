@@ -217,32 +217,34 @@ export class Fireworks {
   }
 }
 
-/** 蛋糕登场：粒子从四周聚合到圆柱表面 */
-export function createAssemble(RADIUS, HEIGHT, count = 700) {
-  const start = new Float32Array(count * 3);
-  const target = new Float32Array(count * 3);
+/** 蛋糕登场：黑色星海 → 漩涡汇聚 → 收成蛋糕 */
+export function createAssemble(RADIUS, HEIGHT, count = 900) {
+  const startAngle = new Float32Array(count);
+  const startRadius = new Float32Array(count);
+  const startY = new Float32Array(count);
+  const targetAngle = new Float32Array(count);
+  const targetRadius = new Float32Array(count);
+  const targetY = new Float32Array(count);
+
   const pos = new Float32Array(count * 3);
   const col = new Float32Array(count * 3);
   const c = new THREE.Color();
   const palette = [0xffffff, 0xffe9a8, 0xff9fd0, 0x9fe8ff, 0xc9a7ff, 0xffc07a];
 
   for (let i = 0; i < count; i++) {
-    const r = 4 + Math.random() * 6;
-    const th = Math.random() * Math.PI * 2;
-    const ph = Math.acos(2 * Math.random() - 1);
-    start[i * 3] = Math.sin(ph) * Math.cos(th) * r;
-    start[i * 3 + 1] = Math.cos(ph) * r * 0.75;
-    start[i * 3 + 2] = Math.sin(ph) * Math.sin(th) * r;
+    // 星海：铺开在整个画面范围
+    startAngle[i] = Math.random() * Math.PI * 2;
+    startRadius[i] = 2.2 + Math.random() * 5.6;
+    startY[i] = (Math.random() - 0.5) * 8.4;
 
-    const a = Math.random() * Math.PI * 2;
-    const y = -HEIGHT / 2 + Math.random() * HEIGHT;
-    target[i * 3] = Math.cos(a) * RADIUS * 1.03;
-    target[i * 3 + 1] = y;
-    target[i * 3 + 2] = Math.sin(a) * RADIUS * 1.03;
+    // 蛋糕表面
+    targetAngle[i] = Math.random() * Math.PI * 2;
+    targetRadius[i] = RADIUS * (0.98 + Math.random() * 0.06);
+    targetY[i] = -HEIGHT / 2 + Math.random() * HEIGHT;
 
-    pos[i * 3] = start[i * 3];
-    pos[i * 3 + 1] = start[i * 3 + 1];
-    pos[i * 3 + 2] = start[i * 3 + 2];
+    pos[i * 3] = Math.cos(startAngle[i]) * startRadius[i];
+    pos[i * 3 + 1] = startY[i];
+    pos[i * 3 + 2] = Math.sin(startAngle[i]) * startRadius[i];
 
     c.setHex(palette[(Math.random() * palette.length) | 0]);
     col[i * 3] = c.r;
@@ -255,7 +257,7 @@ export function createAssemble(RADIUS, HEIGHT, count = 700) {
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
 
   const mat = new THREE.PointsMaterial({
-    size: 0.085,
+    size: 0.075,
     map: DOT,
     vertexColors: true,
     transparent: true,
@@ -267,19 +269,32 @@ export function createAssemble(RADIUS, HEIGHT, count = 700) {
   const pts = new THREE.Points(geo, mat);
   pts.frustumCulled = false;
 
+  const smooth = x => x * x * (3 - 2 * x);
+  const clamp01 = x => (x < 0 ? 0 : x > 1 ? 1 : x);
+
   return {
     mesh: pts,
+    // p: 0 → 1
+    // 0.00~0.20 星海缓慢旋转
+    // 0.20~0.85 螺旋汇聚成漩涡
+    // 0.85~1.00 贴合蛋糕表面
     update(p) {
-      const e = 1 - Math.pow(1 - p, 2.4);
+      const swirl = smooth(clamp01((p - 0.2) / 0.66));
       const arr = geo.attributes.position.array;
+
       for (let i = 0; i < count; i++) {
-        const k = i * 3;
-        arr[k] = start[k] + (target[k] - start[k]) * e;
-        arr[k + 1] = start[k + 1] + (target[k + 1] - start[k + 1]) * e;
-        arr[k + 2] = start[k + 2] + (target[k + 2] - start[k + 2]) * e;
+        const spin = startAngle[i] + swirl * Math.PI * 4.2;
+        const rad = startRadius[i] * (1 - swirl) + targetRadius[i] * swirl;
+        const y = startY[i] * (1 - swirl) + targetY[i] * swirl;
+        // 落位时角度对齐到目标点
+        const angle = spin * (1 - swirl) + (targetAngle[i] + Math.PI * 4.2) * swirl;
+
+        arr[i * 3] = Math.cos(angle) * rad;
+        arr[i * 3 + 1] = y;
+        arr[i * 3 + 2] = Math.sin(angle) * rad;
       }
       geo.attributes.position.needsUpdate = true;
-      mat.opacity = p < 0.78 ? 1 : Math.max(0, 1 - (p - 0.78) / 0.22);
+      mat.opacity = p < 0.86 ? 1 : Math.max(0, 1 - (p - 0.86) / 0.14);
     }
   };
 }
@@ -324,36 +339,83 @@ export function createNebulaField() {
   return group;
 }
 
-/** 银河带：沿倾斜平面铺开的细密星点 */
+/**
+ * 银河带（shader 粒子）：多车道流动 + 闪烁 + 双色渐变
+ * 参考 Mineradio 的星河实现思路，参数按本项目重新调过
+ */
 export function createGalaxyBand(count = 900) {
-  const pos = new Float32Array(count * 3);
-  const col = new Float32Array(count * 3);
-  const c = new THREE.Color();
-  for (let i = 0; i < count; i++) {
-    const a = Math.random() * Math.PI * 2;
-    const r = 7 + Math.random() * 16;
-    const spread = (Math.random() - 0.5) * 3.4;
-    pos[i * 3] = Math.cos(a) * r;
-    pos[i * 3 + 1] = spread * 1.2 + Math.sin(a) * r * 0.26;
-    pos[i * 3 + 2] = Math.sin(a) * r * 0.7 - 10;
-    c.setHSL(0.72 + Math.random() * 0.2, 0.7, 0.6 + Math.random() * 0.3);
-    col[i * 3] = c.r;
-    col[i * 3 + 1] = c.g;
-    col[i * 3 + 2] = c.b;
-  }
   const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
-  const mat = new THREE.PointsMaterial({
-    size: 0.11,
-    map: DOT,
-    vertexColors: true,
+  const seeds = new Float32Array(count);
+  const lanes = new Float32Array(count);
+  const depths = new Float32Array(count);
+
+  for (let i = 0; i < count; i++) {
+    seeds[i] = Math.random() * 1000;
+    lanes[i] = Math.random();
+    depths[i] = Math.random();
+  }
+  geo.setAttribute('seed', new THREE.BufferAttribute(seeds, 1));
+  geo.setAttribute('lane', new THREE.BufferAttribute(lanes, 1));
+  geo.setAttribute('depthSeed', new THREE.BufferAttribute(depths, 1));
+
+  const mat = new THREE.ShaderMaterial({
+    uniforms: {
+      uMap: { value: DOT },
+      uTime: { value: 0 },
+      uPixel: { value: Math.min(typeof devicePixelRatio === 'number' ? devicePixelRatio : 1, 2) },
+      uWidth: { value: 34 },
+      uHeight: { value: 11 },
+      uOpacity: { value: 0.95 },
+      uColorA: { value: new THREE.Color('#7f5cff') },
+      uColorB: { value: new THREE.Color('#ffd7f3') }
+    },
+    vertexShader: [
+      'precision highp float;',
+      'attribute float seed, lane, depthSeed;',
+      'uniform float uTime, uPixel, uWidth, uHeight;',
+      'varying float vSeed, vLane, vGlow;',
+      'float hash(float n){ return fract(sin(n) * 43758.5453123); }',
+      'void main(){',
+      '  float band = floor(lane * 5.0);',
+      '  float local = fract(lane * 5.0);',
+      '  float speed = 0.020 + hash(seed * 1.37) * 0.050 + band * 0.004;',
+      '  float flow = fract(hash(seed * 2.11) + uTime * speed);',
+      '  float x = (flow - 0.5) * uWidth * (1.05 + hash(seed * 5.3) * 0.20);',
+      '  float curve = sin(flow * 6.2831853 * (0.9 + hash(seed * 4.1) * 0.5) + seed * 0.07 + uTime * 0.30);',
+      '  float breath = sin(uTime * (0.40 + hash(seed * 6.7) * 0.40) + seed * 0.09);',
+      '  float y = (band - 2.0) * uHeight * 0.14 + curve * uHeight * (0.18 + hash(seed * 9.3) * 0.16) + (local - 0.5) * uHeight * 0.15 + breath * uHeight * 0.09;',
+      '  float z = -14.0 + (depthSeed - 0.5) * 7.0 + sin(uTime * (0.15 + hash(seed) * 0.20) + seed) * 0.5;',
+      '  vec4 mv = modelViewMatrix * vec4(x, y, z, 1.0);',
+      '  float dist = max(0.8, -mv.z);',
+      '  float edge = smoothstep(0.0, 0.16, flow) * (1.0 - smoothstep(0.84, 1.0, flow));',
+      '  vSeed = seed; vLane = lane;',
+      '  vGlow = edge * (0.60 + 0.40 * sin(uTime * (0.9 + hash(seed * 8.0) * 0.7) + seed));',
+      '  gl_PointSize = clamp((0.020 + hash(seed * 12.0) * 0.050 + vGlow * 0.030) * uPixel * 150.0 / dist, 0.8, 8.5);',
+      '  gl_Position = projectionMatrix * mv;',
+      '}'
+    ].join('\n'),
+    fragmentShader: [
+      'precision highp float;',
+      'uniform sampler2D uMap;',
+      'uniform vec3 uColorA, uColorB;',
+      'uniform float uOpacity, uTime;',
+      'varying float vSeed, vLane, vGlow;',
+      'void main(){',
+      '  vec4 tex = texture2D(uMap, gl_PointCoord);',
+      '  if (tex.a < 0.02) discard;',
+      '  float tw = pow(0.5 + 0.5 * sin(uTime * (0.60 + fract(vSeed) * 0.40) + vSeed), 4.0);',
+      '  vec3 col = mix(uColorA, uColorB, smoothstep(0.10, 0.90, vLane) * 0.45 + tw * 0.40 + vGlow * 0.25);',
+      '  float a = tex.a * uOpacity * (0.18 + vGlow * 0.80 + tw * 0.30);',
+      '  gl_FragColor = vec4(col * (0.80 + vGlow * 0.70 + tw * 0.30), a);',
+      '}'
+    ].join('\n'),
     transparent: true,
-    opacity: 0.9,
     depthWrite: false,
     blending: THREE.AdditiveBlending
   });
+
   const pts = new THREE.Points(geo, mat);
   pts.frustumCulled = false;
+  pts.userData.update = (t) => { mat.uniforms.uTime.value = t; };
   return pts;
 }
