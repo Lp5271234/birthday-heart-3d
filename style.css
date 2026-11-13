@@ -382,6 +382,19 @@ body.dark .icon-btn {
 /* 点击涟漪（canvas 上手写，这里只做提示光标） */
 body.cake-cursor #scene { cursor: pointer; }
 
+/* 进入蛋糕幕的黑场过渡 */
+.blackout {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  background: #000;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .45s ease;
+}
+
+.blackout.on { opacity: 1; }
+
 /* ---------- 开场 ---------- */
 .gate {
   position: fixed;
