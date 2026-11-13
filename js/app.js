@@ -590,6 +590,8 @@ function start() {
   dom.videoStage.hidden = false;
   // 视频播放期间把 3D 停掉，GPU 全留给视频解码，避免卡顿
   dom.canvas.style.visibility = 'hidden';
+  // 手势内先解锁音频元素，否则视频放完（11 秒后）音乐会被浏览器拦掉
+  music.prime();
   try { v.currentTime = 0; } catch (_) {}
   const p = v.play();
   if (p && p.catch) p.catch(() => enterCakeAfterVideo());
@@ -760,6 +762,24 @@ const music = {
     dom.btnSound.setAttribute('aria-pressed', 'false');
     if (this.el) this.el.pause();
     if (this.timer) { clearInterval(this.timer); this.timer = null; }
+  },
+
+  // 在用户手势内解锁音频元素（手机 Safari 必须先 play 过一次）
+  prime() {
+    if (!CFG.audio || this.el) return;
+    try {
+      this.el = new Audio(CFG.audio);
+      this.el.loop = true;
+      this.el.volume = 0.55;
+      this.el.preload = 'auto';
+      const p = this.el.play();
+      if (p && p.then) {
+        p.then(() => { this.el.pause(); this.el.currentTime = 0; }).catch(() => {});
+      } else {
+        this.el.pause();
+        this.el.currentTime = 0;
+      }
+    } catch (_) { /* 静默降级 */ }
   },
   tick() {
     if (!this.on || !this.ctx) return;
