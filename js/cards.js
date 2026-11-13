@@ -131,11 +131,11 @@ export function createNoteTexture(item, index) {
   return tex;
 }
 
-/** 心形参数方程（与参考作品同源） */
+/** 心形参数方程（与参考作品同源，纵向略放大让心形更饱满） */
 export function heartPoint(t, scale) {
   const x = 16 * Math.pow(Math.sin(t), 3);
   const y = 13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t);
-  return { x: (x / 17) * scale, y: (y / 17) * scale };
+  return { x: (x / 17) * scale, y: (y / 17) * scale * 1.22 };
 }
 
 /**
