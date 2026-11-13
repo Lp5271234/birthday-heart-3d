@@ -43,7 +43,12 @@ const dom = {
   btnReplay: document.getElementById('btnReplay'),
   centerCard: document.getElementById('centerCard'),
   btnToCake: document.getElementById('btnToCake'),
-  script: document.getElementById('scriptWord')
+  script: document.getElementById('scriptWord'),
+  photoModal: document.getElementById('photoModal'),
+  photoImg: document.getElementById('photoImg'),
+  photoPlaceholder: document.getElementById('photoPlaceholder'),
+  photoCaption: document.getElementById('photoCaption'),
+  photoClose: document.getElementById('photoClose')
 };
 
 // ---------- 配置文案注入 ----------
@@ -80,6 +85,7 @@ scene.add(rimLight);
 // ---------- 便签爱心 ----------
 const layout = noteLayout(NOTE_COUNT, HEART_SCALE);
 const heartGroup = new THREE.Group();
+heartGroup.visible = false;   // 开场前不渲染，避免便签动画提前跑完
 scene.add(heartGroup);
 
 const noteW = isMobile ? 0.46 : 0.62;
@@ -101,15 +107,45 @@ layout.notes.forEach((n, i) => {
   mesh.rotation.z = n.rot;
   mesh.scale.setScalar(0.4);
   heartGroup.add(mesh);
+  const prev = layout.notes[(i - 1 + layout.notes.length) % layout.notes.length];
   notes.push({
     mesh,
     home: new THREE.Vector3(n.x, n.y, n.z),
+    // 沿路径生长：从上一张便签的位置滑出，第一张就地出现
+    from: i === 0 ? new THREE.Vector3(n.x, n.y, n.z) : new THREE.Vector3(prev.x, prev.y, prev.z),
     rot: n.rot,
-    delay: i * 0.022,
     index: i,
     data
   });
 });
+
+// 画笔光点：沿心形路径移动，便签在它经过时展开
+function makePenTexture() {
+  const s = 128;
+  const c = document.createElement('canvas');
+  c.width = c.height = s;
+  const ctx = c.getContext('2d');
+  const g = ctx.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2);
+  g.addColorStop(0, 'rgba(255,255,255,1)');
+  g.addColorStop(0.22, 'rgba(255,190,225,.95)');
+  g.addColorStop(0.55, 'rgba(255,120,190,.35)');
+  g.addColorStop(1, 'rgba(255,90,160,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, s, s);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+const pen = new THREE.Sprite(new THREE.SpriteMaterial({
+  map: makePenTexture(),
+  transparent: true,
+  opacity: 0,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false
+}));
+pen.scale.set(0.6, 0.6, 1);
+heartGroup.add(pen);
 
 // 中心白卡（DOM）由 start() 控制显示
 
@@ -119,6 +155,43 @@ cake.visible = false;
 cake.scale.setScalar(isMobile ? 1.12 : 1.0);
 scene.add(cake);
 const cakeData = cake.userData;
+
+// 蛋糕上方的光柱（增强"星河"氛围）
+function makeBeamTexture() {
+  const w = 64, h = 256;
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = h;
+  const ctx = c.getContext('2d');
+  const g = ctx.createLinearGradient(0, h, 0, 0);
+  g.addColorStop(0, 'rgba(255,210,245,0)');
+  g.addColorStop(0.14, 'rgba(255,200,240,.55)');
+  g.addColorStop(0.5, 'rgba(200,160,255,.22)');
+  g.addColorStop(1, 'rgba(160,130,255,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, w, h);
+  ctx.globalCompositeOperation = 'destination-in';
+  const hg = ctx.createLinearGradient(0, 0, w, 0);
+  hg.addColorStop(0, 'rgba(255,255,255,0)');
+  hg.addColorStop(0.5, 'rgba(255,255,255,1)');
+  hg.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = hg;
+  ctx.fillRect(0, 0, w, h);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+const beam = new THREE.Sprite(new THREE.SpriteMaterial({
+  map: makeBeamTexture(),
+  transparent: true,
+  opacity: 0.6,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false
+}));
+beam.scale.set(1.7, 5.4, 1);
+beam.position.y = 3.1;
+cake.add(beam);
 
 // ---------- 粒子 ----------
 const confetti = createConfetti(isMobile ? 420 : 900, 14);
@@ -171,6 +244,7 @@ let cakeTargetYaw = 0;
 let cakePitch = 0;
 let drag = { active: false, x: 0, y: 0 };
 let burnT = 0;
+let fwTimer = 0;
 
 // ---------- 交互：拖动旋转 / 缩放 / 点击 ----------
 const pointers = new Map();
@@ -283,7 +357,11 @@ dom.canvas.addEventListener('click', e => {
   if (state === 'cake') {
     pick(e.clientX, e.clientY);
     const hits = raycaster.intersectObject(cake, true);
-    if (hits.length) blowOut();
+    if (hits.length) {
+      spawnRipple(hits[0].point);
+      openPhoto();
+    }
+    return;
   }
 });
 
@@ -292,6 +370,47 @@ function openCard(note) {
   dom.modalTitle.textContent = note.data.short;
   dom.modalText.textContent = note.data.full;
   dom.modal.hidden = false;
+}
+
+// ---------- 点击蛋糕弹图片（图片在 config.js 里预留） ----------
+function openPhoto() {
+  const url = CFG.photo;
+  if (url) {
+    dom.photoImg.src = url;
+    dom.photoImg.alt = CFG.photoAlt || '生日照片';
+    dom.photoImg.hidden = false;
+    dom.photoPlaceholder.hidden = true;
+  } else {
+    dom.photoImg.hidden = true;
+    dom.photoPlaceholder.hidden = false;
+  }
+  dom.photoCaption.textContent = CFG.photoCaption || '';
+  dom.photoModal.hidden = false;
+}
+
+dom.photoClose.addEventListener('click', () => { dom.photoModal.hidden = true; });
+dom.photoModal.addEventListener('click', e => {
+  if (e.target === dom.photoModal) dom.photoModal.hidden = true;
+});
+
+// ---------- 点击涟漪 ----------
+const ripples = [];
+const rippleGeo = new THREE.RingGeometry(0.08, 0.135, 48);
+
+function spawnRipple(point) {
+  const mat = new THREE.MeshBasicMaterial({
+    color: 0xffd9f4,
+    transparent: true,
+    opacity: 1,
+    side: THREE.DoubleSide,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false
+  });
+  const mesh = new THREE.Mesh(rippleGeo, mat);
+  mesh.position.copy(point);
+  mesh.lookAt(camera.position);
+  scene.add(mesh);
+  ripples.push({ mesh, life: 0, ttl: 1.05 });
 }
 
 dom.modalClose.addEventListener('click', () => { dom.modal.hidden = true; });
@@ -305,11 +424,12 @@ function start() {
   state = 'heart';
   dom.gate.classList.add('gone');
   dom.loading.classList.add('gone');
+  heartT = 0;                  // 从零开始"画"爱心
+  for (const n of notes) n.mesh.material.opacity = 0;
   heartGroup.visible = true;
   camera.position.z = dHeart;
   dom.hint.classList.add('on');
-  setTimeout(() => dom.centerCard.classList.add('show'), 700);
-  setTimeout(() => dom.hint.classList.remove('on'), 6000);
+  setTimeout(() => dom.hint.classList.remove('on'), 7000);
 }
 
 // 真实手势（pointerdown）才创建 AudioContext，避免自动播放策略告警
@@ -410,6 +530,23 @@ const music = {
   tryStart() {
     if (this.on) return;
     if (navigator.userActivation && !navigator.userActivation.isActive) return;
+
+    // 预留：配置了 audio 就用外部音乐文件
+    if (CFG.audio) {
+      try {
+        if (!this.el) {
+          this.el = new Audio(CFG.audio);
+          this.el.loop = true;
+          this.el.volume = 0.55;
+        }
+        this.el.play().then(() => {
+          this.on = true;
+          dom.btnSound.setAttribute('aria-pressed', 'true');
+        }).catch(() => {});
+      } catch (_) { /* 静默降级 */ }
+      return;
+    }
+
     try {
       const AC = window.AudioContext || window.webkitAudioContext;
       if (!AC) return;
@@ -424,6 +561,7 @@ const music = {
   stop() {
     this.on = false;
     dom.btnSound.setAttribute('aria-pressed', 'false');
+    if (this.el) this.el.pause();
     if (this.timer) { clearInterval(this.timer); this.timer = null; }
   },
   tick() {
@@ -486,21 +624,39 @@ function animate(now) {
 
   const t = now * 0.001;
 
-  // 幕1：便签飞出 + 轻微呼吸
+  // 幕1：便签沿心形路径依次展开（像一笔画出来）
   if (heartGroup.visible) {
-    heartT = Math.min(1, heartT + dt * 0.85);
+    heartT = Math.min(1, heartT + dt * 0.26);
+    const seg = 0.86 / notes.length;
+    let tipIdx = 0;
     for (const n of notes) {
-      const p = THREE.MathUtils.clamp((heartT - n.delay) / (1 - n.delay || 1), 0, 1);
+      const start = n.index * seg;
+      const p = THREE.MathUtils.clamp((heartT - start) / (seg * 3.0), 0, 1);
       const e = 1 - Math.pow(1 - p, 3);
-      n.mesh.position.lerpVectors(new THREE.Vector3(0, 0, -1), n.home, e);
+      n.mesh.position.lerpVectors(n.from, n.home, e);
       const breathe = 1 + Math.sin(t * 1.2 + n.index * 0.35) * 0.012;
-      n.mesh.scale.setScalar((0.4 + 0.6 * e) * breathe);
+      n.mesh.scale.setScalar((0.45 + 0.55 * e) * breathe);
       n.mesh.rotation.z = n.rot + Math.sin(t * 0.5 + n.index * 0.2) * 0.012;
       n.mesh.material.opacity = e;
+      if (heartT >= start) tipIdx = n.index;
     }
+
+    // 画笔跟着进度走
+    const head = notes[tipIdx];
+    pen.position.copy(head.mesh.position);
+    pen.position.z += 0.06;
+    const penFade = heartT < 0.9 ? 1 : Math.max(0, (1 - heartT) / 0.1);
+    pen.material.opacity = 0.9 * penFade;
+    pen.scale.setScalar((0.5 + Math.sin(t * 9) * 0.06) * penFade);
+
     heartGroup.rotation.y = Math.sin(t * 0.25) * 0.06 + heartSpin;
     heartGroup.rotation.x = Math.sin(t * 0.18) * 0.03;
     heartSpin += (heartSpinTarget - heartSpin) * 0.12;
+
+    // 爱心画完后再浮出中心白卡
+    if (heartT > 0.9 && !dom.centerCard.classList.contains('show')) {
+      dom.centerCard.classList.add('show');
+    }
   }
 
   // 幕2：蛋糕
@@ -541,6 +697,46 @@ function animate(now) {
 
   smoke.update(dt);
   fireworks.update(dt);
+
+  // 涟漪扩散
+  for (let i = ripples.length - 1; i >= 0; i--) {
+    const r = ripples[i];
+    r.life += dt;
+    const k = r.life / r.ttl;
+    r.mesh.scale.setScalar(1 + k * 7);
+    r.mesh.material.opacity = Math.max(0, 0.9 * (1 - k));
+    if (k >= 1) {
+      scene.remove(r.mesh);
+      r.mesh.material.dispose();
+      ripples.splice(i, 1);
+    }
+  }
+
+  // 蛋糕幕：常驻小烟花 + 星环脉动
+  if (cake.visible) {
+    if (state === 'cake') {
+      fwTimer += dt;
+      if (fwTimer > 2.6) {
+        fwTimer = 0;
+        const palette = [0xff8fc7, 0xffd76e, 0x9fe8ff, 0xc9a7ff, 0xffffff];
+        fireworks.burst(
+          new THREE.Vector3(
+            (Math.random() - 0.5) * 3.4,
+            0.5 + Math.random() * 2.4,
+            -0.4 - Math.random() * 1.2
+          ),
+          {
+            color: palette[(Math.random() * palette.length) | 0],
+            count: isMobile ? 46 : 76,
+            power: 0.8,
+            ttl: 1.7
+          }
+        );
+      }
+    }
+    cakeData.ringA.scale.setScalar(1 + Math.sin(t * 1.4) * 0.012);
+    cakeData.ringB.scale.setScalar(1 + Math.sin(t * 1.1 + 1) * 0.016);
+  }
 
   // 相机：按幕切换距离 + 缩放，平滑跟随
   const cakeScene = state === 'cake' || state === 'blown';
