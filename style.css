@@ -401,6 +401,25 @@ body.cake-cursor #scene { cursor: pointer; }
   background: #000;
 }
 
+/* 彻底隐藏手机/桌面上的原生播放控件，让它看起来是页面动画而不是视频 */
+.video-stage video::-webkit-media-controls,
+.video-stage video::-webkit-media-controls-panel,
+.video-stage video::-webkit-media-controls-play-button,
+.video-stage video::-webkit-media-controls-start-playback-button,
+.video-stage video::-webkit-media-controls-enclosure,
+.video-stage video::-webkit-media-controls-overlay-play-button,
+.video-stage video::-internal-media-controls-download-button {
+  display: none !important;
+  -webkit-appearance: none !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+.video-stage video::-webkit-media-controls-start-playback-button {
+  -webkit-appearance: none !important;
+  display: none !important;
+}
+
 /* 进入蛋糕幕的黑场过渡 */
 .blackout {
   position: absolute;
