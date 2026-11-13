@@ -387,6 +387,7 @@ let cakePitch = 0;
 let drag = { active: false, x: 0, y: 0 };
 let burnT = 0;
 let fwTimer = 0;
+let bgReveal = 0;   // 星河从黑到亮
 
 // ---------- 交互：拖动旋转 / 缩放 / 点击 ----------
 const pointers = new Map();
@@ -612,6 +613,10 @@ function goCake() {
   starfield.visible = true;
   nebulaField.visible = true;
   galaxyBand.visible = true;
+  bgReveal = 0;
+  starfield.material.opacity = 0;
+  galaxyBand.material.uniforms.uOpacity.value = 0;
+  nebulaField.children.forEach(sp => { sp.material.opacity = 0; });
   assembleT = 0;
   assemble.mesh.visible = true;
   assemble.update(0);
@@ -880,13 +885,18 @@ function animate(now) {
   smoke.update(dt);
   fireworks.update(dt);
 
-  // 背景星云漂移 + 银河带缓慢旋转（并随蛋糕转动，形成"整个世界一起转"）
+  // 背景星云漂移 + 星河渐亮（从纯黑里一点点亮起来）
   if (nebulaField.visible) {
+    bgReveal = Math.min(1, bgReveal + dt * 0.34);
+    const rv = bgReveal * bgReveal * (3 - 2 * bgReveal);
+
     for (let i = 0; i < nebulaField.children.length; i++) {
       const sp = nebulaField.children[i];
       sp.position.y = sp.userData.baseY + Math.sin(t * 0.18 + sp.userData.phase) * 0.9;
-      sp.material.opacity = 0.24 + Math.sin(t * 0.32 + i) * 0.07;
+      sp.material.opacity = (0.24 + Math.sin(t * 0.32 + i) * 0.07) * rv;
     }
+    starfield.material.opacity = 0.72 * rv;
+    galaxyBand.material.uniforms.uOpacity.value = 0.95 * rv;
     galaxyBand.rotation.y = t * 0.012 + cakeYaw * 0.32;
     galaxyBand.rotation.z = Math.sin(t * 0.06) * 0.05;
     if (galaxyBand.userData.update) galaxyBand.userData.update(t);
@@ -929,8 +939,12 @@ function animate(now) {
         );
       }
     }
+    cakeData.ringA.rotation.y += dt * (cakeData.ringA.userData.speed || 0.3);
+    cakeData.ringB.rotation.y += dt * (cakeData.ringB.userData.speed || -0.2);
+    cakeData.ringC.rotation.y += dt * (cakeData.ringC.userData.speed || 0.14);
     cakeData.ringA.scale.setScalar(1 + Math.sin(t * 1.4) * 0.012);
     cakeData.ringB.scale.setScalar(1 + Math.sin(t * 1.1 + 1) * 0.016);
+    if (cakeData.dust && cakeData.dust.update) cakeData.dust.update(t);
 
     // 气球：从屏幕外的锚点沿绳子滑入 + 漂浮 + 爆掉/复原
     for (const b of balloons) {
@@ -944,14 +958,20 @@ function animate(now) {
       const sc = b.scaleBase * Math.max(0.001, b.grow);
       b.group.scale.setScalar(sc);
 
-      const px = b.anchor.x + (b.target.x - b.anchor.x) * en;
-      const py = b.anchor.y + (b.target.y - b.anchor.y) * en + Math.sin(t * 0.85 + b.phase) * 0.11 * en;
-      const pz = b.anchor.z + (b.target.z - b.anchor.z) * en;
-      b.group.position.set(px, py, pz);
+      const bx = b.anchor.x + (b.target.x - b.anchor.x) * en;
+      const by = b.anchor.y + (b.target.y - b.anchor.y) * en;
+      const bz = b.anchor.z + (b.target.z - b.anchor.z) * en;
 
-      if (en > 0.02) {
-        b.group.rotation.z = Math.sin(t * 0.62 + b.phase) * 0.055;
-      }
+      // 风吹摆动：绕绳子固定点做钟摆
+      const gust = Math.sin(t * 0.24 + b.phase * 0.4) * 0.035;
+      const swing = (Math.sin(t * 0.9 + b.phase) * 0.16 + Math.sin(t * 2.3 + b.phase * 1.6) * 0.05 + gust) * en;
+      const pivot = 0.45 * sc;
+      const px = bx - Math.sin(swing) * pivot;
+      const py = by - (1 - Math.cos(swing)) * pivot + Math.sin(t * 0.85 + b.phase) * 0.06 * en;
+      const pz = bz;
+
+      b.group.position.set(px, py, pz);
+      b.group.rotation.z = swing;
 
       // 绳子：锚点 → 气球底部（保持圆柱朝向下一个点）
       if (b.string) {
