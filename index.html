@@ -50,6 +50,21 @@
   </div>
 </div>
 
+<div id="photoModal" class="modal photo-modal" hidden>
+  <div class="photo-card" role="dialog" aria-modal="true" aria-labelledby="photoCaption">
+    <div class="photo-frame">
+      <img id="photoImg" alt="生日照片" hidden>
+      <div id="photoPlaceholder" class="photo-placeholder">
+        <span class="ph-icon">📷</span>
+        <span class="ph-text">这里会放一张我们的照片</span>
+        <span class="ph-hint">把图片放进 assets/ 并在 config.js 填 photo</span>
+      </div>
+    </div>
+    <p id="photoCaption" class="photo-caption"></p>
+    <button class="modal-close" type="button" id="photoClose">收好</button>
+  </div>
+</div>
+
 <div id="gate" class="gate">
   <div class="gate-inner">
     <p class="gate-kicker">A CAKE FOR YOU</p>
