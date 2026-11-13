@@ -48,7 +48,8 @@ const dom = {
   photoImg: document.getElementById('photoImg'),
   photoPlaceholder: document.getElementById('photoPlaceholder'),
   photoCaption: document.getElementById('photoCaption'),
-  photoClose: document.getElementById('photoClose')
+  photoClose: document.getElementById('photoClose'),
+  blackout: document.getElementById('blackout')
 };
 
 // ---------- 配置文案注入 ----------
@@ -252,17 +253,6 @@ function createBalloon(color, x, y, z, scale) {
   knot.rotation.x = Math.PI;
   group.add(knot);
 
-  const lineGeo = new THREE.BufferGeometry().setFromPoints([
-    new THREE.Vector3(0, -0.45, 0),
-    new THREE.Vector3(0, -1.15, 0)
-  ]);
-  const line = new THREE.Line(lineGeo, new THREE.LineBasicMaterial({
-    color: 0xffffff,
-    transparent: true,
-    opacity: 0.22
-  }));
-  group.add(line);
-
   group.position.set(x, y, z);
   group.scale.setScalar(scale);
   return group;
@@ -270,25 +260,44 @@ function createBalloon(color, x, y, z, scale) {
 
 function buildBalloons() {
   const spread = isMobile ? 1.35 : 2.1;
+  // 每个气球：目标位置 + 屏幕外的绳子锚点
   const spots = [
-    [-spread, 0.7, 0.35, 1.0],
-    [spread, 1.0, 0.15, 0.9],
-    [-spread * 0.78, 1.95, -0.5, 0.8],
-    [spread * 0.86, 2.05, -0.6, 0.74],
-    [-spread * 0.42, 2.6, -1.0, 0.62]
+    { x: -spread, y: 0.7, z: 0.35, s: 1.0, ax: -3.8, ay: -1.9, az: 0.9 },
+    { x: spread, y: 1.0, z: 0.15, s: 0.9, ax: 3.8, ay: -1.7, az: 0.8 },
+    { x: -spread * 0.78, y: 1.95, z: -0.5, s: 0.8, ax: -3.6, ay: 0.2, az: 0.5 },
+    { x: spread * 0.86, y: 2.05, z: -0.6, s: 0.74, ax: 3.6, ay: 0.5, az: 0.4 },
+    { x: -spread * 0.42, y: 2.6, z: -1.0, s: 0.62, ax: -1.4, ay: 5.0, az: -0.6 }
   ];
+
   spots.forEach((s, i) => {
-    const group = createBalloon(balloonColors[i % balloonColors.length], s[0], s[1], s[2], s[3]);
+    const group = createBalloon(balloonColors[i % balloonColors.length], s.ax, s.ay, s.az, s.s);
     group.visible = false;
     scene.add(group);
+
+    // 绳子：从屏幕外锚点连到气球底部（细圆柱，比 Line 更明显）
+    const stringGeo = new THREE.CylinderGeometry(0.008, 0.008, 1, 6);
+    stringGeo.translate(0, 0.5, 0);
+    const string = new THREE.Mesh(stringGeo, new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0.42,
+      depthWrite: false
+    }));
+    string.visible = false;
+    scene.add(string);
+
     balloons.push({
       group,
-      baseY: s[1],
+      string,
+      anchor: new THREE.Vector3(s.ax, s.ay, s.az),
+      target: new THREE.Vector3(s.x, s.y, s.z),
+      baseY: s.y,
       phase: Math.random() * 6.28,
       alive: true,
       color: balloonColors[i % balloonColors.length],
-      scaleBase: s[3],
-      grow: 0
+      scaleBase: s.s,
+      grow: 0,
+      enter: 0
     });
   });
 }
@@ -298,6 +307,7 @@ function popBalloon(b) {
   if (!b.alive) return;
   b.alive = false;
   b.group.visible = false;
+  if (b.string) b.string.visible = false;
   const p = b.group.position.clone();
   fireworks.burst(p, { color: b.color, count: isMobile ? 70 : 110, power: 1.0, ttl: 1.5 });
   fireworks.burst(p, { color: 0xffffff, count: 26, power: 0.6, ttl: 1.1, size: 0.08 });
@@ -307,6 +317,8 @@ function popBalloon(b) {
     if (dom.photoModal.hidden) {
       b.alive = true;
       b.group.visible = true;
+      b.enter = 0;
+      if (b.string) b.string.visible = true;
     } else {
       setTimeout(restore, 400);
     }
@@ -428,9 +440,9 @@ dom.canvas.addEventListener('pointermove', e => {
     // 爱心幕：左右滑动让便签立体转一下
     heartSpinTarget = THREE.MathUtils.clamp(heartSpinTarget + dx * 0.0016, -0.55, 0.55);
   } else {
-    cakeTargetYaw += dx * 0.007;
-    inertia = dx * 0.007;
-    cakePitch = THREE.MathUtils.clamp(cakePitch + dy * 0.0018, -0.3, 0.4);
+    cakeTargetYaw += dx * 0.0032;
+    inertia = dx * 0.0032;
+    cakePitch = THREE.MathUtils.clamp(cakePitch + dy * 0.0012, -0.25, 0.3);
   }
 });
 
@@ -588,6 +600,10 @@ function goCake() {
   dom.script.style.opacity = '0';
   document.body.classList.add('dark');
 
+  // 黑场：先暗下来，再让星海浮现
+  dom.blackout.classList.add('on');
+  setTimeout(() => dom.blackout.classList.remove('on'), 420);
+
   heartGroup.visible = false;
   cake.visible = true;
   cake.scale.setScalar(0.4);
@@ -607,6 +623,8 @@ function goCake() {
   balloons.forEach(b => {
     b.alive = true;
     b.group.visible = true;
+    b.enter = 0;
+    if (b.string) b.string.visible = true;
   });
 }
 
@@ -816,25 +834,23 @@ function animate(now) {
     }
   }
 
-  // 幕2：蛋糕
+  // 幕2：蛋糕（星海 → 漩涡 → 成型）
   if (cake.visible) {
-    const grow = Math.min(1, (cake.userData.growT = (cake.userData.growT || 0) + dt * 0.6));
-    // 前半段只有粒子聚拢，蛋糕本体后显现
-    const show = THREE.MathUtils.clamp((grow - 0.32) / 0.68, 0, 1);
-    const se = 1 - Math.pow(1 - show, 3);
-    const base = isMobile ? 1.12 : 1.0;
-    cake.scale.setScalar(base * (0.2 + 0.8 * se));
-    cake.position.y = -3 + 3 * se;
-
-    // 粒子聚合
     if (assembleT < 1) {
-      assembleT = Math.min(1, assembleT + dt * 0.62);
+      assembleT = Math.min(1, assembleT + dt * 0.42);
       assemble.update(assembleT);
       if (assembleT >= 1) assemble.mesh.visible = false;
     }
 
+    // 漩涡收拢后，蛋糕才从中心长出来（不再从下往上弹）
+    const show = THREE.MathUtils.clamp((assembleT - 0.62) / 0.3, 0, 1);
+    const se = 1 - Math.pow(1 - show, 3);
+    const base = isMobile ? 1.12 : 1.0;
+    cake.scale.setScalar(base * (0.06 + 0.94 * se));
+    cake.position.y = 0;
+
     cakeTargetYaw += dt * 0.2 + inertia;
-    inertia *= 0.93;
+    inertia *= 0.9;
     cakeYaw += (cakeTargetYaw - cakeYaw) * 0.12;
     cake.rotation.y = cakeYaw;
     cake.rotation.x = cakePitch;
@@ -864,15 +880,17 @@ function animate(now) {
   smoke.update(dt);
   fireworks.update(dt);
 
-  // 背景星云漂移 + 银河带缓慢旋转
+  // 背景星云漂移 + 银河带缓慢旋转（并随蛋糕转动，形成"整个世界一起转"）
   if (nebulaField.visible) {
     for (let i = 0; i < nebulaField.children.length; i++) {
       const sp = nebulaField.children[i];
       sp.position.y = sp.userData.baseY + Math.sin(t * 0.18 + sp.userData.phase) * 0.9;
       sp.material.opacity = 0.24 + Math.sin(t * 0.32 + i) * 0.07;
     }
-    galaxyBand.rotation.y = t * 0.018;
+    galaxyBand.rotation.y = t * 0.012 + cakeYaw * 0.32;
     galaxyBand.rotation.z = Math.sin(t * 0.06) * 0.05;
+    if (galaxyBand.userData.update) galaxyBand.userData.update(t);
+    starfield.rotation.y = cakeYaw * 0.16;
   }
 
   // 涟漪扩散
@@ -914,14 +932,36 @@ function animate(now) {
     cakeData.ringA.scale.setScalar(1 + Math.sin(t * 1.4) * 0.012);
     cakeData.ringB.scale.setScalar(1 + Math.sin(t * 1.1 + 1) * 0.016);
 
-    // 气球：漂浮 + 爆掉/复原的缩放过渡（不随蛋糕旋转）
+    // 气球：从屏幕外的锚点沿绳子滑入 + 漂浮 + 爆掉/复原
     for (const b of balloons) {
       if (!b.group.visible) continue;
+
+      // 入场：沿锚点→目标位置的直线滑入
+      b.enter = Math.min(1, b.enter + dt * 0.7);
+      const en = 1 - Math.pow(1 - b.enter, 3);
+
       b.grow += ((b.alive ? 1 : 0) - b.grow) * 0.14;
-      b.group.scale.setScalar(b.scaleBase * Math.max(0.001, b.grow));
-      if (b.alive && b.grow > 0.05) {
-        b.group.position.y = b.baseY + Math.sin(t * 0.85 + b.phase) * 0.11;
+      const sc = b.scaleBase * Math.max(0.001, b.grow);
+      b.group.scale.setScalar(sc);
+
+      const px = b.anchor.x + (b.target.x - b.anchor.x) * en;
+      const py = b.anchor.y + (b.target.y - b.anchor.y) * en + Math.sin(t * 0.85 + b.phase) * 0.11 * en;
+      const pz = b.anchor.z + (b.target.z - b.anchor.z) * en;
+      b.group.position.set(px, py, pz);
+
+      if (en > 0.02) {
         b.group.rotation.z = Math.sin(t * 0.62 + b.phase) * 0.055;
+      }
+
+      // 绳子：锚点 → 气球底部（保持圆柱朝向下一个点）
+      if (b.string) {
+        const bottom = new THREE.Vector3(px, py - 0.42 * sc, pz);
+        const dir = bottom.clone().sub(b.anchor);
+        const len = dir.length();
+        b.string.position.copy(b.anchor);
+        b.string.scale.set(1, Math.max(0.001, len), 1);
+        b.string.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize());
+        b.string.material.opacity = 0.42 * b.grow * Math.min(1, en * 2);
       }
     }
   }
