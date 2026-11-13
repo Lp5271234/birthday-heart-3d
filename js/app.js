@@ -588,6 +588,8 @@ function start() {
   if (!v) { enterCakeAfterVideo(); return; }
 
   dom.videoStage.hidden = false;
+  // 视频播放期间把 3D 停掉，GPU 全留给视频解码，避免卡顿
+  dom.canvas.style.visibility = 'hidden';
   try { v.currentTime = 0; } catch (_) {}
   const p = v.play();
   if (p && p.catch) p.catch(() => enterCakeAfterVideo());
@@ -599,8 +601,10 @@ function enterCakeAfterVideo() {
   if (state !== 'video') return;
   state = 'cake-pending';
   dom.videoStage.hidden = true;
+  dom.canvas.style.visibility = '';
   const v = dom.introVideo;
   if (v) { try { v.pause(); } catch (_) {} }
+  last = performance.now();
   goCake();
   music.tryStart();
   // 若浏览器把音乐拦了（长视频播完后手势已过期），等下一次点击补上
@@ -805,6 +809,13 @@ let acc = 0;
 
 function animate(now) {
   requestAnimationFrame(animate);
+
+  // 视频幕：完全不渲染 3D，把 GPU 让给视频
+  if (state === 'video') {
+    last = now;
+    return;
+  }
+
   const dtRaw = Math.min(0.05, (now - last) / 1000);
   last = now;
 
