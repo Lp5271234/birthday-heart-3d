@@ -52,7 +52,21 @@ window.BIRTHDAY_CONFIG = {
   // 开场与提示
   gateKicker: "A CAKE FOR YOU",
   gateSub: "轻触屏幕，点亮蜡烛",
-  hint: "拖动旋转 · 点明信片看祝福 · 点蛋糕吹蜡烛",
+  hint: "拖动旋转 · 双指/滚轮缩放 · 点便签看祝福",
   blowText: "吹蜡烛，许个愿",
-  replayText: "再看一次"
+  replayText: "再看一次",
+
+  /* ===== 预留：点蛋糕弹出的图片 =====
+   * 留空时点击蛋糕显示占位提示；
+   * 之后把图片放进站点目录（例如 assets/photo.jpg），这里填 "assets/photo.jpg"。
+   */
+  photo: "",
+  photoCaption: "这是我们的小秘密",
+  photoAlt: "生日照片",
+
+  /* ===== 预留：背景音乐 =====
+   * 留空时用内置 Web Audio 八音盒旋律；
+   * 之后把 mp3 放进站点目录（例如 assets/bgm.mp3），这里填 "assets/bgm.mp3"。
+   */
+  audio: ""
 };
