@@ -49,7 +49,9 @@ const dom = {
   photoPlaceholder: document.getElementById('photoPlaceholder'),
   photoCaption: document.getElementById('photoCaption'),
   photoClose: document.getElementById('photoClose'),
-  blackout: document.getElementById('blackout')
+  blackout: document.getElementById('blackout'),
+  videoStage: document.getElementById('videoStage'),
+  introVideo: document.getElementById('introVideo')
 };
 
 // ---------- 配置文案注入 ----------
@@ -109,7 +111,9 @@ function makeShadowTexture() {
 const shadowTex = makeShadowTexture();
 
 const notes = [];
-layout.notes.forEach((n, i) => {
+// 爱心便签幕已由开场视频替代：保留代码但不再构建，省内存
+const ENABLE_HEART = false;
+if (ENABLE_HEART) layout.notes.forEach((n, i) => {
   const data = cards[i % cards.length];
   const tex = createNoteTexture(data, i);
 
@@ -168,15 +172,18 @@ function makePenTexture() {
   return t;
 }
 
-const pen = new THREE.Sprite(new THREE.SpriteMaterial({
-  map: makePenTexture(),
-  transparent: true,
-  opacity: 0,
-  blending: THREE.AdditiveBlending,
-  depthWrite: false
-}));
-pen.scale.set(0.6, 0.6, 1);
-heartGroup.add(pen);
+let pen = null;
+if (ENABLE_HEART) {
+  pen = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: makePenTexture(),
+    transparent: true,
+    opacity: 0,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false
+  }));
+  pen.scale.set(0.6, 0.6, 1);
+  heartGroup.add(pen);
+}
 
 // 中心白卡（DOM）由 start() 控制显示
 
@@ -573,34 +580,45 @@ dom.modal.addEventListener('click', e => {
 // ---------- 开场 ----------
 function start() {
   if (state !== 'idle') return;
-  state = 'heart';
+  state = 'video';
   dom.gate.classList.add('gone');
   dom.loading.classList.add('gone');
-  heartT = 0;                  // 从零开始"画"爱心
-  for (const n of notes) {
-    for (const m of n.mesh.material) m.opacity = 0;
-    n.shadowMat.opacity = 0;
-  }
-  heartGroup.visible = true;
-  camera.position.z = dHeart;
-  dom.hint.classList.add('on');
-  setTimeout(() => dom.hint.classList.remove('on'), 7000);
+
+  const v = dom.introVideo;
+  if (!v) { enterCakeAfterVideo(); return; }
+
+  dom.videoStage.hidden = false;
+  try { v.currentTime = 0; } catch (_) {}
+  const p = v.play();
+  if (p && p.catch) p.catch(() => enterCakeAfterVideo());
+  v.addEventListener('ended', enterCakeAfterVideo, { once: true });
 }
 
-// 真实手势（pointerdown）才创建 AudioContext，避免自动播放策略告警
-dom.btnStart.addEventListener('pointerdown', () => music.tryStart(), { once: true });
+// 视频结束后：进入星河蛋糕幕，这时才开始放背景音乐（不与视频声音重叠）
+function enterCakeAfterVideo() {
+  if (state !== 'video') return;
+  state = 'cake-pending';
+  dom.videoStage.hidden = true;
+  const v = dom.introVideo;
+  if (v) { try { v.pause(); } catch (_) {} }
+  goCake();
+  music.tryStart();
+  // 若浏览器把音乐拦了（长视频播完后手势已过期），等下一次点击补上
+  if (!music.on) {
+    addEventListener('pointerdown', () => { if (!music.on) music.tryStart(); }, { once: true });
+  }
+}
 
 dom.btnStart.addEventListener('click', start);
 
 // ---------- 进入蛋糕幕 ----------
 function goCake() {
-  if (state !== 'heart') return;
+  if (state === 'cake' || state === 'blown') return;
   state = 'cake';
   dom.centerCard.classList.remove('show');
   dom.hint.classList.remove('on');
   dom.script.style.opacity = '0';
   document.body.classList.add('dark');
-
   // 黑场：先暗下来，再让星海浮现
   dom.blackout.classList.add('on');
   setTimeout(() => dom.blackout.classList.remove('on'), 420);
