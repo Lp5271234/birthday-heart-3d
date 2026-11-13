@@ -4,7 +4,7 @@
  */
 import * as THREE from '../vendor/three.module.min.js';
 import { createNoteTexture, noteLayout } from './cards.js';
-import { createConfetti, createStarfield, Smoke, Fireworks } from './particles.js';
+import { createConfetti, createStarfield, createAssemble, createNebulaField, createGalaxyBand, Smoke, Fireworks } from './particles.js';
 import { createCake } from './cake.js';
 
 const CFG = window.BIRTHDAY_CONFIG || {};
@@ -91,25 +91,55 @@ scene.add(heartGroup);
 const noteW = isMobile ? 0.46 : 0.62;
 const noteH = noteW * (298 / 224);
 
+// 便签投影贴图（让便签看起来"浮"在背景上）
+function makeShadowTexture() {
+  const s = 128;
+  const c = document.createElement('canvas');
+  c.width = c.height = s;
+  const ctx = c.getContext('2d');
+  const g = ctx.createRadialGradient(s / 2, s / 2, s * 0.08, s / 2, s / 2, s * 0.52);
+  g.addColorStop(0, 'rgba(255,255,255,1)');
+  g.addColorStop(0.5, 'rgba(255,255,255,.6)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, s, s);
+  return new THREE.CanvasTexture(c);
+}
+const shadowTex = makeShadowTexture();
+
 const notes = [];
 layout.notes.forEach((n, i) => {
   const data = cards[i % cards.length];
   const tex = createNoteTexture(data, i);
-  const mat = new THREE.MeshBasicMaterial({
-    map: tex,
+
+  const faceMat = new THREE.MeshBasicMaterial({ map: tex, transparent: true });
+  faceMat.opacity = 0;
+  const edgeMat = new THREE.MeshBasicMaterial({ color: 0xf1e7ee, transparent: true });
+  edgeMat.opacity = 0;
+  const shadowMat = new THREE.MeshBasicMaterial({
+    map: shadowTex,
+    color: 0x000000,
     transparent: true,
-    side: THREE.DoubleSide,
+    opacity: 0,
     depthWrite: false
   });
-  mat.opacity = 0;
-  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(noteW, noteH), mat);
+
+  // 有厚度的便签（0.02 板厚），正面贴图、侧面米白
+  const geo = new THREE.BoxGeometry(noteW, noteH, 0.02);
+  const mesh = new THREE.Mesh(geo, [edgeMat, edgeMat, edgeMat, edgeMat, faceMat, edgeMat]);
   mesh.position.set(0, 0, -1);
   mesh.rotation.z = n.rot;
   mesh.scale.setScalar(0.4);
+
+  const shadow = new THREE.Mesh(new THREE.PlaneGeometry(noteW * 1.2, noteH * 1.2), shadowMat);
+  shadow.position.set(0.035, -0.045, -0.028);
+  mesh.add(shadow);
+
   heartGroup.add(mesh);
   const prev = layout.notes[(i - 1 + layout.notes.length) % layout.notes.length];
   notes.push({
     mesh,
+    shadowMat,
     home: new THREE.Vector3(n.x, n.y, n.z),
     // 沿路径生长：从上一张便签的位置滑出，第一张就地出现
     from: i === 0 ? new THREE.Vector3(n.x, n.y, n.z) : new THREE.Vector3(prev.x, prev.y, prev.z),
@@ -156,6 +186,12 @@ cake.scale.setScalar(isMobile ? 1.12 : 1.0);
 scene.add(cake);
 const cakeData = cake.userData;
 
+// 蛋糕登场：粒子从四周聚合到蛋糕表面
+const assemble = createAssemble(1.12, 1.46, isMobile ? 380 : 640);
+assemble.mesh.visible = false;
+cake.add(assemble.mesh);
+let assembleT = 1;
+
 // 蛋糕上方的光柱（增强"星河"氛围）
 function makeBeamTexture() {
   const w = 64, h = 256;
@@ -193,14 +229,108 @@ beam.scale.set(1.7, 5.4, 1);
 beam.position.y = 3.1;
 cake.add(beam);
 
+// ---------- 气球（独立于蛋糕，不随旋转） ----------
+const balloonColors = [0xff8fc7, 0xc9a7ff, 0xffd76e, 0x9fe8ff, 0xffa9a0];
+const balloons = [];
+
+function createBalloon(color, x, y, z, scale) {
+  const group = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({
+    color,
+    roughness: 0.26,
+    metalness: 0.04,
+    emissive: new THREE.Color(color),
+    emissiveIntensity: 0.22
+  });
+
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.3, 24, 20), mat);
+  body.scale.set(1, 1.24, 1);
+  group.add(body);
+
+  const knot = new THREE.Mesh(new THREE.ConeGeometry(0.055, 0.1, 8), mat);
+  knot.position.y = -0.4;
+  knot.rotation.x = Math.PI;
+  group.add(knot);
+
+  const lineGeo = new THREE.BufferGeometry().setFromPoints([
+    new THREE.Vector3(0, -0.45, 0),
+    new THREE.Vector3(0, -1.15, 0)
+  ]);
+  const line = new THREE.Line(lineGeo, new THREE.LineBasicMaterial({
+    color: 0xffffff,
+    transparent: true,
+    opacity: 0.22
+  }));
+  group.add(line);
+
+  group.position.set(x, y, z);
+  group.scale.setScalar(scale);
+  return group;
+}
+
+function buildBalloons() {
+  const spread = isMobile ? 1.35 : 2.1;
+  const spots = [
+    [-spread, 0.7, 0.35, 1.0],
+    [spread, 1.0, 0.15, 0.9],
+    [-spread * 0.78, 1.95, -0.5, 0.8],
+    [spread * 0.86, 2.05, -0.6, 0.74],
+    [-spread * 0.42, 2.6, -1.0, 0.62]
+  ];
+  spots.forEach((s, i) => {
+    const group = createBalloon(balloonColors[i % balloonColors.length], s[0], s[1], s[2], s[3]);
+    group.visible = false;
+    scene.add(group);
+    balloons.push({
+      group,
+      baseY: s[1],
+      phase: Math.random() * 6.28,
+      alive: true,
+      color: balloonColors[i % balloonColors.length],
+      scaleBase: s[3],
+      grow: 0
+    });
+  });
+}
+buildBalloons();
+
+function popBalloon(b) {
+  if (!b.alive) return;
+  b.alive = false;
+  b.group.visible = false;
+  const p = b.group.position.clone();
+  fireworks.burst(p, { color: b.color, count: isMobile ? 70 : 110, power: 1.0, ttl: 1.5 });
+  fireworks.burst(p, { color: 0xffffff, count: 26, power: 0.6, ttl: 1.1, size: 0.08 });
+  openPhoto();
+  // 照片关掉后气球重新出现，可反复点
+  const restore = () => {
+    if (dom.photoModal.hidden) {
+      b.alive = true;
+      b.group.visible = true;
+    } else {
+      setTimeout(restore, 400);
+    }
+  };
+  setTimeout(restore, 900);
+}
+
 // ---------- 粒子 ----------
 const confetti = createConfetti(isMobile ? 420 : 900, 14);
 confetti.visible = false;
 scene.add(confetti);
 
-const starfield = createStarfield(isMobile ? 500 : 1200);
+const starfield = createStarfield(isMobile ? 900 : 2200);
 starfield.visible = false;
 scene.add(starfield);
+
+// 背景星云 + 银河带（星河感）
+const nebulaField = createNebulaField();
+nebulaField.visible = false;
+scene.add(nebulaField);
+
+const galaxyBand = createGalaxyBand(isMobile ? 520 : 900);
+galaxyBand.visible = false;
+scene.add(galaxyBand);
 
 const smoke = new Smoke(scene);
 const fireworks = new Fireworks(scene);
@@ -354,13 +484,22 @@ dom.canvas.addEventListener('click', e => {
     }
     return;
   }
-  if (state === 'cake') {
+  if (state === 'cake' || state === 'blown') {
     pick(e.clientX, e.clientY);
-    const hits = raycaster.intersectObject(cake, true);
-    if (hits.length) {
-      spawnRipple(hits[0].point);
-      openPhoto();
+
+    // 优先检测气球：点爆气球才弹照片
+    const balloonMeshes = balloons.map(b => b.group);
+    const bHits = raycaster.intersectObjects(balloonMeshes, true);
+    if (bHits.length) {
+      let target = bHits[0].object;
+      while (target.parent && !balloons.some(b => b.group === target)) target = target.parent;
+      const b = balloons.find(x => x.group === target);
+      if (b) { popBalloon(b); return; }
     }
+
+    // 点蛋糕只做涟漪反馈，不弹窗
+    const hits = raycaster.intersectObject(cake, true);
+    if (hits.length) spawnRipple(hits[0].point);
     return;
   }
 });
@@ -425,7 +564,10 @@ function start() {
   dom.gate.classList.add('gone');
   dom.loading.classList.add('gone');
   heartT = 0;                  // 从零开始"画"爱心
-  for (const n of notes) n.mesh.material.opacity = 0;
+  for (const n of notes) {
+    for (const m of n.mesh.material) m.opacity = 0;
+    n.shadowMat.opacity = 0;
+  }
   heartGroup.visible = true;
   camera.position.z = dHeart;
   dom.hint.classList.add('on');
@@ -452,10 +594,20 @@ function goCake() {
   cake.position.y = -3;
   confetti.visible = true;
   starfield.visible = true;
+  nebulaField.visible = true;
+  galaxyBand.visible = true;
+  assembleT = 0;
+  assemble.mesh.visible = true;
+  assemble.update(0);
   camera.position.z = dCake;
   camera.position.y = dCake * 0.24;
   camera.lookAt(0, 0, 0);
   dom.cta.classList.add('on');
+
+  balloons.forEach(b => {
+    b.alive = true;
+    b.group.visible = true;
+  });
 }
 
 dom.btnToCake.addEventListener('click', goCake);
@@ -634,10 +786,15 @@ function animate(now) {
       const p = THREE.MathUtils.clamp((heartT - start) / (seg * 3.0), 0, 1);
       const e = 1 - Math.pow(1 - p, 3);
       n.mesh.position.lerpVectors(n.from, n.home, e);
+      // 每张便签独立的轻微浮动，形成"呼吸感"
+      const bob = Math.sin(t * 1.35 + n.index * 0.45) * 0.016 * e;
+      n.mesh.position.y += bob;
+      n.mesh.position.z += Math.sin(t * 0.9 + n.index * 0.7) * 0.01 * e;
       const breathe = 1 + Math.sin(t * 1.2 + n.index * 0.35) * 0.012;
       n.mesh.scale.setScalar((0.45 + 0.55 * e) * breathe);
       n.mesh.rotation.z = n.rot + Math.sin(t * 0.5 + n.index * 0.2) * 0.012;
-      n.mesh.material.opacity = e;
+      for (const m of n.mesh.material) m.opacity = e;
+      n.shadowMat.opacity = 0.22 * e;
       if (heartT >= start) tipIdx = n.index;
     }
 
@@ -661,11 +818,20 @@ function animate(now) {
 
   // 幕2：蛋糕
   if (cake.visible) {
-    const grow = Math.min(1, (cake.userData.growT = (cake.userData.growT || 0) + dt * 1.2));
-    const ge = 1 - Math.pow(1 - grow, 3);
+    const grow = Math.min(1, (cake.userData.growT = (cake.userData.growT || 0) + dt * 0.6));
+    // 前半段只有粒子聚拢，蛋糕本体后显现
+    const show = THREE.MathUtils.clamp((grow - 0.32) / 0.68, 0, 1);
+    const se = 1 - Math.pow(1 - show, 3);
     const base = isMobile ? 1.12 : 1.0;
-    cake.scale.setScalar(base * (0.4 + 0.6 * ge));
-    cake.position.y = -3 + 3 * ge;
+    cake.scale.setScalar(base * (0.2 + 0.8 * se));
+    cake.position.y = -3 + 3 * se;
+
+    // 粒子聚合
+    if (assembleT < 1) {
+      assembleT = Math.min(1, assembleT + dt * 0.62);
+      assemble.update(assembleT);
+      if (assembleT >= 1) assemble.mesh.visible = false;
+    }
 
     cakeTargetYaw += dt * 0.2 + inertia;
     inertia *= 0.93;
@@ -697,6 +863,17 @@ function animate(now) {
 
   smoke.update(dt);
   fireworks.update(dt);
+
+  // 背景星云漂移 + 银河带缓慢旋转
+  if (nebulaField.visible) {
+    for (let i = 0; i < nebulaField.children.length; i++) {
+      const sp = nebulaField.children[i];
+      sp.position.y = sp.userData.baseY + Math.sin(t * 0.18 + sp.userData.phase) * 0.9;
+      sp.material.opacity = 0.24 + Math.sin(t * 0.32 + i) * 0.07;
+    }
+    galaxyBand.rotation.y = t * 0.018;
+    galaxyBand.rotation.z = Math.sin(t * 0.06) * 0.05;
+  }
 
   // 涟漪扩散
   for (let i = ripples.length - 1; i >= 0; i--) {
@@ -736,6 +913,17 @@ function animate(now) {
     }
     cakeData.ringA.scale.setScalar(1 + Math.sin(t * 1.4) * 0.012);
     cakeData.ringB.scale.setScalar(1 + Math.sin(t * 1.1 + 1) * 0.016);
+
+    // 气球：漂浮 + 爆掉/复原的缩放过渡（不随蛋糕旋转）
+    for (const b of balloons) {
+      if (!b.group.visible) continue;
+      b.grow += ((b.alive ? 1 : 0) - b.grow) * 0.14;
+      b.group.scale.setScalar(b.scaleBase * Math.max(0.001, b.grow));
+      if (b.alive && b.grow > 0.05) {
+        b.group.position.y = b.baseY + Math.sin(t * 0.85 + b.phase) * 0.11;
+        b.group.rotation.z = Math.sin(t * 0.62 + b.phase) * 0.055;
+      }
+    }
   }
 
   // 相机：按幕切换距离 + 缩放，平滑跟随
