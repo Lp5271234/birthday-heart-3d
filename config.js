@@ -68,5 +68,5 @@ window.BIRTHDAY_CONFIG = {
    * 留空时用内置 Web Audio 八音盒旋律；
    * 之后把 mp3 放进站点目录（例如 assets/bgm.mp3），这里填 "assets/bgm.mp3"。
    */
-  audio: ""
+  audio: "assets/bgm.m4a"
 };
