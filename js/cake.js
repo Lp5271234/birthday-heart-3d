@@ -58,26 +58,41 @@ function createSprinkles(RADIUS, HEIGHT, count) {
   const scl = new THREE.Vector3();
 
   for (let i = 0; i < count; i++) {
-    const onSide = Math.random() < 0.86;
+    const roll = Math.random();
     let x, y, z, s;
 
-    if (onSide) {
+    if (roll < 0.58) {
+      // 侧面表层（最密）
       const a = Math.random() * Math.PI * 2;
-      const yy = -HEIGHT / 2 + Math.random() * HEIGHT;
-      // 少量粒子微微浮出表面，增强实体感
-      const r = RADIUS * (0.99 + Math.random() * 0.05);
+      const r = RADIUS * (0.985 + Math.random() * 0.06);
       x = Math.cos(a) * r;
       z = Math.sin(a) * r;
-      y = yy;
-      s = 0.008 + Math.random() * 0.019;
-    } else {
-      // 顶面星云里的小颗粒
+      y = -HEIGHT / 2 + Math.random() * HEIGHT;
+      s = 0.009 + Math.random() * 0.022;
+    } else if (roll < 0.82) {
+      // 内部体积（透过半透明蛋糕体可见，撑出"粒子蛋糕"的体积感）
+      const a = Math.random() * Math.PI * 2;
+      const r = RADIUS * (0.25 + Math.random() * 0.7);
+      x = Math.cos(a) * r;
+      z = Math.sin(a) * r;
+      y = -HEIGHT / 2 + Math.random() * HEIGHT;
+      s = 0.007 + Math.random() * 0.016;
+    } else if (roll < 0.92) {
+      // 顶面星云
       const a = Math.random() * Math.PI * 2;
       const rr = Math.sqrt(Math.random()) * RADIUS * 0.86;
       x = Math.cos(a) * rr;
       z = Math.sin(a) * rr;
-      y = HEIGHT / 2 + 0.006 + Math.random() * 0.03;
+      y = HEIGHT / 2 + 0.006 + Math.random() * 0.04;
       s = 0.007 + Math.random() * 0.015;
+    } else {
+      // 外围飞舞
+      const a = Math.random() * Math.PI * 2;
+      const r = RADIUS * (1.12 + Math.random() * 1.1);
+      x = Math.cos(a) * r;
+      z = Math.sin(a) * r;
+      y = -HEIGHT / 2 + (Math.random() - 0.2) * HEIGHT * 1.9;
+      s = 0.006 + Math.random() * 0.014;
     }
 
     pos.set(x, y, z);
@@ -208,8 +223,10 @@ export function createCake() {
 
   const sideMat = new THREE.MeshStandardMaterial({
     map: base,
+    transparent: true,
+    opacity: 0.62,
     emissive: new THREE.Color(0x3a2f7a),
-    emissiveIntensity: 0.75,
+    emissiveIntensity: 0.6,
     roughness: 0.6,
     metalness: 0.18
   });
@@ -232,7 +249,8 @@ export function createCake() {
   group.add(body);
 
   // 真 3D 糖粒（InstancedMesh 小球，随蛋糕旋转产生真实视差）
-  const sprinkleCount = window.__SPRINKLE_COUNT || 1600;
+  const mobile = typeof matchMedia === 'function' && matchMedia('(max-width: 820px)').matches;
+  const sprinkleCount = window.__SPRINKLE_COUNT || (mobile ? 2000 : 3200);
   const sprinkles = createSprinkles(RADIUS, HEIGHT, sprinkleCount);
   group.add(sprinkles);
 
@@ -389,7 +407,7 @@ export function createCake() {
   group.add(ringC);
 
   // 蛋糕周围漂浮的彩色粒子
-  const dust = createFloatingDust(RADIUS, HEIGHT, 300);
+  const dust = createFloatingDust(RADIUS, HEIGHT, 180);
   group.add(dust);
 
   // 底部辉光
