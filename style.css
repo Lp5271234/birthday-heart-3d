@@ -384,6 +384,23 @@ body.dark .icon-btn {
 /* 点击涟漪（canvas 上手写，这里只做提示光标） */
 body.cake-cursor #scene { cursor: pointer; }
 
+/* 开场视频（替换原来的爱心便签幕） */
+.video-stage {
+  position: fixed;
+  inset: 0;
+  z-index: 25;
+  background: #000;
+  display: grid;
+  place-items: center;
+}
+
+.video-stage video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: #000;
+}
+
 /* 进入蛋糕幕的黑场过渡 */
 .blackout {
   position: absolute;
