@@ -372,14 +372,25 @@ export function createCake() {
   flameLight.position.set(0, tipY + 0.2, 0.1);
   group.add(flameLight);
 
-  // 星环 ×2（贴近蛋糕、穿过中部）
-  const ringA = makeRing(1.72, 220, 0xbfe0ff, 0.9);
-  ringA.rotation.set(0.44, 0, 0.1);
+  // 星环 ×3（粒子土星环，倾斜穿过蛋糕）
+  const ringA = makeRing(1.62, 520, 0xbfe0ff, 0.95);
+  ringA.rotation.set(0.46, 0, 0.1);
+  ringA.userData.speed = 0.32;
   group.add(ringA);
 
-  const ringB = makeRing(1.98, 260, 0xffc9ec, 0.66);
-  ringB.rotation.set(-0.36, 0.26, -0.12);
+  const ringB = makeRing(1.98, 620, 0xffc9ec, 0.72);
+  ringB.rotation.set(-0.38, 0.26, -0.12);
+  ringB.userData.speed = -0.22;
   group.add(ringB);
+
+  const ringC = makeRing(2.38, 420, 0xffe6a8, 0.5);
+  ringC.rotation.set(0.62, 0.5, 0.18);
+  ringC.userData.speed = 0.14;
+  group.add(ringC);
+
+  // 蛋糕周围漂浮的彩色粒子
+  const dust = createFloatingDust(RADIUS, HEIGHT, 300);
+  group.add(dust);
 
   // 底部辉光
   const floorGlow = new THREE.Sprite(new THREE.SpriteMaterial({
@@ -394,8 +405,66 @@ export function createCake() {
   group.add(floorGlow);
 
   group.userData = {
-    ringA, ringB, flame, flameLight, nebula,
+    ringA, ringB, ringC, dust, flame, flameLight, nebula,
     candleTip: new THREE.Vector3(0, tipY, 0)
   };
   return group;
+}
+
+/** 蛋糕周围缓慢漂浮的彩色粒子 */
+function createFloatingDust(RADIUS, HEIGHT, count) {
+  const pos = new Float32Array(count * 3);
+  const base = new Float32Array(count * 3);
+  const seeds = new Float32Array(count);
+  const col = new Float32Array(count * 3);
+  const c = new THREE.Color();
+  const palette = [0xffd76e, 0xff9fd0, 0x9fe8ff, 0xffffff, 0xffc07a, 0xc9a7ff];
+
+  for (let i = 0; i < count; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const r = RADIUS * (1.15 + Math.random() * 1.6);
+    const y = -HEIGHT / 2 + (Math.random() - 0.2) * HEIGHT * 2.1;
+    base[i * 3] = Math.cos(a) * r;
+    base[i * 3 + 1] = y;
+    base[i * 3 + 2] = Math.sin(a) * r;
+    pos[i * 3] = base[i * 3];
+    pos[i * 3 + 1] = base[i * 3 + 1];
+    pos[i * 3 + 2] = base[i * 3 + 2];
+    seeds[i] = Math.random() * 6.28;
+    c.setHex(palette[(Math.random() * palette.length) | 0]);
+    col[i * 3] = c.r;
+    col[i * 3 + 1] = c.g;
+    col[i * 3 + 2] = c.b;
+  }
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+
+  const mat = new THREE.PointsMaterial({
+    size: 0.075,
+    map: RING_DOT,
+    vertexColors: true,
+    transparent: true,
+    opacity: 0.95,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending
+  });
+
+  const pts = new THREE.Points(geo, mat);
+  pts.frustumCulled = false;
+  pts.userData = { base, seeds };
+
+  pts.update = (t) => {
+    const arr = geo.attributes.position.array;
+    for (let i = 0; i < count; i++) {
+      const s = seeds[i];
+      arr[i * 3] = base[i * 3] + Math.sin(t * 0.55 + s) * 0.22;
+      arr[i * 3 + 1] = base[i * 3 + 1] + Math.sin(t * 0.8 + s * 1.3) * 0.26;
+      arr[i * 3 + 2] = base[i * 3 + 2] + Math.cos(t * 0.6 + s * 0.8) * 0.22;
+    }
+    geo.attributes.position.needsUpdate = true;
+  };
+
+  return pts;
 }
