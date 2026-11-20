@@ -3,7 +3,7 @@
  * 链接里也可以临时覆盖：?to=小名&from=署名
  */
 window.BIRTHDAY_CONFIG = {
-  to: "朋友",
+  to: "卢日培",
   from: "我",
   // 心形明信片上的短句（会自动排版到卡片上）
   cards: [
