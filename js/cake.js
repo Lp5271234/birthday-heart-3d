@@ -19,29 +19,29 @@ const CREAM_H = 0.02;
 /** 供 app.js 计算相机取景与气球高度，避免两处重复维护尺寸 */
 export const CAKE_SIZE = { RADIUS, HEIGHT, CREAM_H };
 
-/* 星空粒子配色：冷白/淡蓝为主，少量暖金点缀 —— 不要高饱和糖果色 */
+/* 彩色散景：参考图里那一片大小不一、柔和发光的彩点（不是硬边糖果点） */
 const DOT_PALETTE = [
-  '#e8f2ff', '#cfe0ff', '#b8d4ff', '#9fe8ff', '#ffffff',
-  '#d9c8ff', '#ffe6c8', '#a8f0e0'
+  '#5fb8ff', '#3f7dff', '#22d6ff', '#ffd24d', '#ff9a3c',
+  '#ff7ab8', '#a97bff', '#7dffd8'
 ];
 
 /* 五角星：只留金色系，太大太白会像贴纸 */
 const STAR_PALETTE = ['#ffd84d', '#ffe89a', '#ffc061'];
 
-/* 侧面色块：星云感 —— 蓝、青、紫、金、粉交织（参考图里是彩色星云，不是单一深蓝） */
+/* 侧面色块：星云感，整体偏紫（蓝紫为主 + 青与金橙点睛） */
 const SIDE_BLOBS = [
-  ['rgba(44,116,255,.92)', 0.22, 0.30, 0.36],
-  ['rgba(0,214,255,.72)', 0.62, 0.20, 0.28],
-  ['rgba(126,66,255,.78)', 0.46, 0.56, 0.34],
-  ['rgba(255,152,42,.62)', 0.78, 0.64, 0.22],
-  ['rgba(255,86,164,.52)', 0.34, 0.84, 0.20],
-  ['rgba(22,44,190,.92)', 0.10, 0.70, 0.30],
-  ['rgba(160,255,255,.55)', 0.88, 0.34, 0.24],
-  ['rgba(255,222,120,.50)', 0.56, 0.92, 0.18],
-  ['rgba(86,42,206,.70)', 0.68, 0.88, 0.26],
-  ['rgba(0,132,255,.74)', 0.94, 0.62, 0.20],
-  ['rgba(255,120,220,.40)', 0.14, 0.44, 0.22],
-  ['rgba(120,240,255,.44)', 0.40, 0.12, 0.20]
+  ['rgba(96,72,255,.94)', 0.22, 0.30, 0.36],
+  ['rgba(140,90,255,.78)', 0.62, 0.20, 0.28],
+  ['rgba(126,66,255,.88)', 0.46, 0.56, 0.34],
+  ['rgba(255,152,42,.58)', 0.78, 0.64, 0.22],
+  ['rgba(255,86,178,.56)', 0.34, 0.84, 0.20],
+  ['rgba(48,40,210,.94)', 0.10, 0.70, 0.30],
+  ['rgba(198,176,255,.58)', 0.88, 0.34, 0.24],
+  ['rgba(255,222,120,.46)', 0.56, 0.92, 0.18],
+  ['rgba(96,42,214,.76)', 0.68, 0.88, 0.26],
+  ['rgba(124,64,255,.76)', 0.94, 0.62, 0.20],
+  ['rgba(255,120,228,.46)', 0.14, 0.44, 0.22],
+  ['rgba(170,130,255,.50)', 0.40, 0.12, 0.20]
 ];
 
 /** 顶面贴图：深蓝星云顶（参考图的顶面就是深色星云，不是白奶油） */
@@ -103,14 +103,14 @@ function makeCloudTexture(size = 1024) {
   ctx.clearRect(0, 0, size, size);
 
   const blobs = [
-    ['rgba(40,140,255,.85)', 0.20, 0.28, 0.30],
-    ['rgba(0,230,255,.62)', 0.58, 0.18, 0.24],
+    ['rgba(120,80,255,.85)', 0.20, 0.28, 0.30],
+    ['rgba(160,110,255,.62)', 0.58, 0.18, 0.24],
     ['rgba(150,80,255,.62)', 0.44, 0.52, 0.28],
-    ['rgba(255,170,50,.55)', 0.80, 0.62, 0.20],
-    ['rgba(255,90,180,.42)', 0.30, 0.80, 0.18],
-    ['rgba(120,255,240,.45)', 0.86, 0.30, 0.18],
-    ['rgba(70,40,200,.55)', 0.66, 0.90, 0.24],
-    ['rgba(0,150,255,.60)', 0.10, 0.62, 0.22]
+    ['rgba(255,170,50,.52)', 0.80, 0.62, 0.20],
+    ['rgba(255,90,190,.44)', 0.30, 0.80, 0.18],
+    ['rgba(190,160,255,.48)', 0.86, 0.30, 0.18],
+    ['rgba(80,40,200,.58)', 0.66, 0.90, 0.24],
+    ['rgba(140,80,255,.62)', 0.10, 0.62, 0.22]
   ];
 
   blobs.forEach(([color, cx, cy, rr]) => {
@@ -198,10 +198,10 @@ function makeBaseTexture(size = 1024) {
   const ctx = c.getContext('2d');
 
   const bg = ctx.createLinearGradient(0, 0, 0, size);
-  bg.addColorStop(0, '#14225e');
-  bg.addColorStop(0.32, '#101a4c');
-  bg.addColorStop(0.68, '#0c1136');
-  bg.addColorStop(1, '#05061a');
+  bg.addColorStop(0, '#2a1f7a');
+  bg.addColorStop(0.32, '#1e1856');
+  bg.addColorStop(0.68, '#16103a');
+  bg.addColorStop(1, '#08061c');
   ctx.fillStyle = bg;
   ctx.fillRect(0, 0, size, size);
 
@@ -477,26 +477,26 @@ function createColorDots(count) {
 
   // 螺旋带：绕蛋糕往上盘
   const spiral = (n, sizeMin, sizeMax) => createDotLayer(n, sizeMin, sizeMax, DOT_PALETTE, {
-    twinkle: 0.55,
-    map: SPARK,
-    solid: false,
-    opacity: 0.88,
+    twinkle: 0.22,
+    map: ROUND_DOT,
+    solid: true,
+    opacity: 0.62,
     genPos: () => {
-      if (Math.random() < 0.52) {
-        // 螺旋带：绕蛋糕往上盘
+      if (Math.random() < 0.5) {
+        // 环绕带：贴蛋糕外围往上盘
         const t = Math.random();
         const a = t * Math.PI * 2.6 + (Math.random() - 0.5) * 0.6;
-        const r = RADIUS * (1.10 + Math.random() * 0.60);
+        const r = RADIUS * (1.12 + Math.random() * 0.68);
         return {
           x: Math.cos(a) * r,
           y: -HEIGHT * 0.42 + t * HEIGHT * 1.55 + (Math.random() - 0.5) * 0.26,
           z: Math.sin(a) * r
         };
       }
-      // 外围星空壳
+      // 外围散景壳
       const a = Math.random() * Math.PI * 2;
       const ph = Math.acos(2 * Math.random() - 1);
-      const r = RADIUS * (1.15 + Math.pow(Math.random(), 0.7) * 1.05);
+      const r = RADIUS * (1.15 + Math.pow(Math.random(), 0.7) * 1.15);
       return {
         x: Math.sin(ph) * Math.cos(a) * r,
         y: Math.cos(ph) * r * 1.05,
@@ -505,8 +505,8 @@ function createColorDots(count) {
     }
   });
 
-  group.add(spiral(Math.round(count * 0.62), 0.035, 0.090));
-  group.add(spiral(Math.round(count * 0.38), 0.020, 0.045));
+  group.add(spiral(Math.round(count * 0.62), 0.045, 0.115));
+  group.add(spiral(Math.round(count * 0.38), 0.024, 0.058));
   return group;
 }
 
@@ -633,8 +633,96 @@ function makeNebulaTexture(size = 512) {
   return tex;
 }
 
-function makeGlowTexture(color = '255,210,240') {
-  const s = 256;
+/**
+ * 侧面文字：用糖粒小球在蛋糕表面"拼"出来
+ *
+ * 为什么不做贴图：贴一张平面在表面，无论怎么摆都像"贴上去的"，
+ * 而且顶面被烛光照亮时白字直接看不见。改成把文字采样成点，
+ * 再用和糖粒同样的小球实例摆到圆柱侧面上 —— 它就是蛋糕表面的一部分，
+ * 会随蛋糕旋转、被灯光照出明暗、和糖粒处在同一层质感里。
+ */
+function createSideText(text, RADIUS, HEIGHT) {
+  const W = 1024;
+  const H = 256;
+  const c = document.createElement('canvas');
+  c.width = W;
+  c.height = H;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, W, H);
+
+  let fontSize = 150;
+  ctx.font = 'bold ' + fontSize + 'px "PingFang SC","Microsoft YaHei","Noto Sans SC",sans-serif';
+  const tw = ctx.measureText(text).width || 1;
+  if (tw > W * 0.92) {
+    fontSize = Math.floor(fontSize * (W * 0.92) / tw);
+    ctx.font = 'bold ' + fontSize + 'px "PingFang SC","Microsoft YaHei","Noto Sans SC",sans-serif';
+  }
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText(text, W / 2, H / 2);
+
+  const data = ctx.getImageData(0, 0, W, H).data;
+
+  // 采样：步长越大点越少；点数控制在 1300 以内
+  let step = 5;
+  let samples = [];
+  while (step <= 14) {
+    samples = [];
+    for (let y = 0; y < H; y += step) {
+      for (let x = 0; x < W; x += step) {
+        if (data[(y * W + x) * 4 + 3] > 130) {
+          samples.push(x / W, y / H);
+        }
+      }
+    }
+    if (samples.length / 2 <= 1300) break;
+    step++;
+  }
+
+  const count = samples.length / 2;
+  if (!count) return null;
+
+  // 贴到圆柱侧面：正面 +Z 为中心
+  // 关键：字高必须按"弧长 / 画布宽高比"算，否则字会被横向拉伸或纵向压扁
+  const span = 1.5;                              // 横向跨约 86°
+  const arcLen = span * RADIUS;                  // 弧长（世界单位）
+  const heightSpan = (arcLen * H) / W;           // 保持画布 4:1 的比例
+  const yy0 = 0.10;
+
+  const geo = new THREE.SphereGeometry(0.0145, 6, 5);
+  const mat = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    transparent: true,
+    opacity: 0,
+    toneMapped: false
+  });
+  const mesh = new THREE.InstancedMesh(geo, mat, count);
+  const m4 = new THREE.Matrix4();
+  const q0 = new THREE.Quaternion();
+  const v3 = new THREE.Vector3();
+  const s3 = new THREE.Vector3(1, 1, 1);
+
+  for (let i = 0; i < count; i++) {
+    const u = samples[i * 2];
+    const v = samples[i * 2 + 1];
+    const ang = (u - 0.5) * span;
+    const y = yy0 + (0.5 - v) * heightSpan;
+    // 贴着蛋糕表面（体半径 1.18）：留一点点间隙避免与本体 z-fighting，
+    // 但不能离太远，否则看起来像漂在表面外面
+    const r = RADIUS * (1.004 + Math.random() * 0.008);
+    v3.set(Math.sin(ang) * r, y, Math.cos(ang) * r);
+    const s = 0.9 + Math.random() * 0.7;
+    s3.set(s, s, s);
+    m4.compose(v3, q0, s3);
+    mesh.setMatrixAt(i, m4);
+  }
+  mesh.instanceMatrix.needsUpdate = true;
+  mesh.frustumCulled = false;
+  return mesh;
+}
+
+function makeGlowTexture(color = '255,210,240') {  const s = 256;
   const c = document.createElement('canvas');
   c.width = c.height = s;
   const ctx = c.getContext('2d');
@@ -938,17 +1026,49 @@ export function createCake() {
   // 表面细密糖粒
   group.add(createSprinkles(mobile ? 4200 : 7200));
 
-  /* ---------- 顶面：只有边缘一圈薄淋面（不是整层白奶油） ---------- */
+  /* ---------- 顶面：厚而不规则的流动奶油（参考图里是一整层厚奶油 + 金色焦糖） ---------- */
+  // 蜡烛位置要先生成：下面的焦糖、蜡池、文字都依赖它
+  const candleX = -0.13;
   const creamMat = new THREE.MeshStandardMaterial({
-    color: 0xfff6fb,
-    roughness: 0.24,
+    // 不要纯白：纯白 + 聚光 + 光晕会直接过曝成一坨，奶白偏暖才有油画质地
+    color: 0xfff2e2,
+    roughness: 0.30,
     metalness: 0.02,
-    emissive: new THREE.Color(0xffe8f2),
-    emissiveIntensity: 0.55
+    emissive: new THREE.Color(0xffd6ac),
+    emissiveIntensity: 0.18,
+    transparent: true,
+    opacity: 0.95
   });
 
-  // 淋面：贴着顶面边缘的一圈薄壁，顶沿做高低起伏（参考图的边缘是不规则的）
-  const icingGeo = new THREE.CylinderGeometry(RADIUS * 1.010, RADIUS * 1.020, 0.085, 128, 1, true);
+  // 几块大扁球叠出"流动的奶油面"：主块盖满顶面，副块只做起伏，避免出现同心圆感
+  [
+    { x: 0.00, z: 0.00, r: 0.95, sy: 0.080, y: -0.040 },
+    { x: 0.30, z: 0.18, r: 0.60, sy: 0.070, y: -0.018 },
+    { x: -0.28, z: -0.30, r: 0.56, sy: 0.060, y: -0.022 }
+  ].forEach(b => {
+    const blob = new THREE.Mesh(new THREE.SphereGeometry(b.r, 28, 18), creamMat);
+    blob.position.set(b.x, HEIGHT / 2 + b.y, b.z);
+    blob.scale.set(1, b.sy, 1);
+    group.add(blob);
+  });
+
+  // 金色焦糖：用贴面光斑而不是实心球，才像"被烛光照亮的奶油"而不是一块铜片
+  const caramel = new THREE.Mesh(
+    new THREE.CircleGeometry(0.72, 40),
+    new THREE.MeshBasicMaterial({
+      map: makeGlowTexture('255,198,124'),
+      transparent: true,
+      opacity: 1.0,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    })
+  );
+  caramel.rotation.x = -Math.PI / 2;
+  caramel.position.set(candleX * 0.5, HEIGHT / 2 + 0.062, 0.04);
+  group.add(caramel);
+
+  // 淋面侧壁：贴着顶面边缘的一圈薄壁，顶沿高低起伏
+  const icingGeo = new THREE.CylinderGeometry(RADIUS * 1.010, RADIUS * 1.020, 0.075, 128, 1, true);
   {
     const pa = icingGeo.attributes.position;
     const vv = new THREE.Vector3();
@@ -956,8 +1076,8 @@ export function createCake() {
       vv.fromBufferAttribute(pa, i);
       if (vv.y > 0) {
         const a = Math.atan2(vv.z, vv.x);
-        const h = Math.sin(a * 6.0) * 0.017
-          + Math.sin(a * 13.0 + 1.7) * 0.011
+        const h = Math.sin(a * 6.0) * 0.016
+          + Math.sin(a * 13.0 + 1.7) * 0.010
           + Math.sin(a * 23.0 + 0.4) * 0.006;
         pa.setY(i, vv.y + h);
       }
@@ -966,11 +1086,11 @@ export function createCake() {
     icingGeo.computeVertexNormals();
   }
   const icing = new THREE.Mesh(icingGeo, creamMat);
-  icing.position.y = HEIGHT / 2 - 0.020;
+  icing.position.y = HEIGHT / 2 - 0.035;
   icing.castShadow = true;
   group.add(icing);
 
-  // 淋面滴落：沿边缘几处垂下来
+  // 淋面滴落
   const dripCount = mobile ? 9 : 12;
   const dripGeo = new THREE.SphereGeometry(0.026, 8, 8);
   for (let i = 0; i < dripCount; i++) {
@@ -979,26 +1099,11 @@ export function createCake() {
     const drip = new THREE.Mesh(dripGeo, creamMat);
     drip.position.set(
       Math.cos(a) * RADIUS * 1.012,
-      HEIGHT / 2 - 0.02 - len * 0.5,
+      HEIGHT / 2 - 0.035 - len * 0.5,
       Math.sin(a) * RADIUS * 1.012
     );
     drip.scale.set(1, 1 + len * 7, 1);
     group.add(drip);
-  }
-
-  // 顶面不平整：几块压扁的奶油堆，集中在中心一带（参考图的奶油团就在蜡烛周围）
-  const heapCount = mobile ? 4 : 5;
-  for (let i = 0; i < heapCount; i++) {
-    const a = Math.random() * Math.PI * 2;
-    const rr = RADIUS * (0.10 + Math.random() * 0.38);
-    const heap = new THREE.Mesh(
-      new THREE.SphereGeometry(0.15 + Math.random() * 0.16, 12, 10),
-      creamMat
-    );
-    heap.position.set(Math.cos(a) * rr, HEIGHT / 2 - 0.012, Math.sin(a) * rr);
-    heap.scale.set(1, 0.13 + Math.random() * 0.10, 1);
-    heap.rotation.y = Math.random() * Math.PI;
-    group.add(heap);
   }
 
   // 顶面发光星云
@@ -1027,17 +1132,15 @@ export function createCake() {
 
   /* ---------- 粉紫蜡烛 + 高火苗 ---------- */
   const candleH = 0.60;
-  // 蜡烛偏左插在奶油里（参考图里就在左侧，不是正中）
-  const candleX = -0.13;
-  const candleTex = makeCandleTexture();
+  // 蜡烛：光滑浅紫（参考图里是光滑的淡紫柱，没有螺旋纹）
   const candle = new THREE.Mesh(
     new THREE.CylinderGeometry(0.023, 0.026, candleH, 20),
     new THREE.MeshStandardMaterial({
-      map: candleTex,
-      emissiveMap: candleTex,
-      roughness: 0.34,
-      emissive: new THREE.Color(0x8a4a72),
-      emissiveIntensity: 0.30
+      color: 0xdfaeea,
+      roughness: 0.30,
+      metalness: 0.02,
+      emissive: new THREE.Color(0x7a4a90),
+      emissiveIntensity: 0.28
     })
   );
   candle.position.set(candleX, HEIGHT / 2 + CREAM_H + candleH / 2, 0.02);
@@ -1160,6 +1263,18 @@ export function createCake() {
   group.add(candleGlow);
 
   group.add(flame);
+
+  // 火光在空气里的散射：参考图上火焰外那一大团柔和暖光 —— 这才是"朦胧感"的来源
+  const aura = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: makeGlowTexture('255,186,112'),
+    transparent: true,
+    opacity: 0.34,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false
+  }));
+  aura.scale.set(2.7, 2.7, 1);
+  aura.position.set(candleX, tipY + 0.16, 0.02);
+  group.add(aura);
 
   const flameLight = new THREE.PointLight(0xffa451, 5.5, 7, 2);
   flameLight.position.set(candleX, tipY + 0.2, 0.12);
@@ -1286,7 +1401,7 @@ export function createCake() {
   group.add(sparkRing);
 
   /* ---------- 彩色圆点主角层 + 漂浮星尘 + 顶面喷发 ---------- */
-  const colorDots = createColorDots(mobile ? 1000 : 1500);
+  const colorDots = createColorDots(mobile ? 1000 : 1200);
   group.add(colorDots);
 
   // 五角星（参考图里很显眼的一层）
@@ -1298,6 +1413,15 @@ export function createCake() {
 
   const dust = createFloatingDust(RADIUS, HEIGHT + CREAM_H, mobile ? 220 : 340);
   group.add(dust);
+
+  // 侧面文字：吹灭蜡烛后浮现（文案来自 config.cakeText）
+  const cfgRef = (typeof window !== 'undefined' && window.BIRTHDAY_CONFIG) || {};
+  const cakeTextStr = cfgRef.cakeText || '';
+  let cakeTextMesh = null;
+  if (cakeTextStr) {
+    cakeTextMesh = createSideText(cakeTextStr, RADIUS, HEIGHT);
+    if (cakeTextMesh) group.add(cakeTextMesh);
+  }
 
   const floorGlow = new THREE.Sprite(new THREE.SpriteMaterial({
     map: makeGlowTexture('150,130,255'),
@@ -1313,6 +1437,7 @@ export function createCake() {
   group.userData = {
     ringA: bandA, ringB: bandB, ringC: bandC, ringD: bandD,
     dust, flame, flameLight, nebula, colorDots, bigStars,
+    cakeTextMesh,
     flameX: candleX,
     candleTip: new THREE.Vector3(candleX, tipY, 0.02)
   };
