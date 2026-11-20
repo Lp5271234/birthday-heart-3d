@@ -79,6 +79,29 @@ body.dark .vignette {
   background: radial-gradient(120% 90% at 50% 50%, transparent 38%, rgba(2, 1, 6, .8) 100%);
 }
 
+/* ---------- 朦胧感（真正来源：光源的柔光扩散，不是全屏灰雾） ----------
+   参考图背景仍是深黑，只有"灯/火/亮点"周围有柔和光晕。
+   所以这里只留中心（蜡烛位置）一层极淡的暖色散射，不加四角彩色光斑，
+   否则整幅画面会发灰、失去深空对比。 */
+.haze {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+  opacity: 0;
+  transition: opacity 1.4s ease;
+  will-change: opacity;
+  background:
+    radial-gradient(34% 26% at 50% 34%, rgba(255, 196, 132, .16), transparent 72%),
+    radial-gradient(52% 34% at 50% 62%, rgba(210, 170, 255, .08), transparent 76%);
+  filter: blur(26px);
+}
+
+body.dark .haze { opacity: 1; }
+
+/* 降级：低端机省掉这层模糊合成 */
+body.light-perf .haze { display: none; }
+
 /* ---------- 书法字（仅在浅色爱心幕） ---------- */
 .script-word {
   position: absolute;
@@ -325,36 +348,38 @@ body.dark .icon-btn {
   cursor: pointer;
 }
 
-/* ---------- 点蛋糕弹出的图片 ---------- */
+/* ---------- 点气球弹出的图片（只放照片，约占手机屏 1/4，居中） ---------- */
 .photo-card {
-  width: min(360px, 86vw);
-  padding: 14px 14px 20px;
-  border-radius: 20px;
-  background: linear-gradient(160deg, #211238, #150a22 70%);
+  width: min(250px, 62vw);
+  padding: 7px;
+  border-radius: 16px;
+  background: linear-gradient(160deg, #241441, #150a22 70%);
   border: 1px solid rgba(255, 190, 220, .34);
-  box-shadow: 0 30px 90px rgba(0, 0, 0, .7), inset 0 1px 0 rgba(255, 255, 255, .14);
-  text-align: center;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, .68), inset 0 1px 0 rgba(255, 255, 255, .14);
+  cursor: pointer;
   animation: photoPop .5s cubic-bezier(.2, .9, .25, 1.15);
 }
 
 .photo-frame {
   width: 100%;
-  aspect-ratio: 3 / 4;
-  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
   overflow: hidden;
   background:
     radial-gradient(70% 60% at 50% 40%, rgba(255, 160, 210, .22), transparent 70%),
     linear-gradient(160deg, #2a1a44, #180d28);
   border: 1px solid rgba(255, 200, 230, .22);
-  display: grid;
-  place-items: center;
 }
 
+/* 横图竖图都按原比例完整显示，不裁切 */
 .photo-frame img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
   display: block;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 42vh;
+  object-fit: contain;
 }
 
 .photo-placeholder {
@@ -370,9 +395,9 @@ body.dark .icon-btn {
 .ph-hint { font-size: 11px; letter-spacing: .06em; color: rgba(255, 255, 255, .35); line-height: 1.7; }
 
 .photo-caption {
-  margin: 14px 0 16px;
-  font-size: 13px;
-  letter-spacing: .12em;
+  margin: 10px 0 8px;
+  font-size: 11px;
+  letter-spacing: .10em;
   color: rgba(255, 255, 255, .72);
 }
 
@@ -402,28 +427,42 @@ body.cake-cursor #scene { cursor: pointer; }
   height: 100%;
   display: block;
   background: #000;
+  z-index: 2;
 }
 
-/* 压到 2px + 近乎透明：既不参与可见渲染，也不会被浏览器停下解码
-   （display:none / visibility:hidden 会让部分手机直接停止解码） */
+/* 关键：手机（尤其 iOS）上如果 video 只有 2px 大，会被"优化"掉不解码，
+   canvas 里 drawImage 就只能拿到黑帧 —— 视频就变成黑屏。
+   所以这里给 video 完整尺寸，只靠近乎透明的 opacity 与下层 z-index 藏起来，
+   canvas 不透明地盖在上面，原生控件也就画不出来。 */
 .intro-video {
   position: absolute;
-  left: 0;
-  top: 0;
-  width: 2px;
-  height: 2px;
-  opacity: 0.001;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.01;
   border: 0;
   padding: 0;
   margin: 0;
-  object-fit: contain;
   pointer-events: none;
+  z-index: 1;
+  background: #000;
+}
+
+/* 兜底：一旦检测到 canvas 画不出画面，就让 video 自己显示（宁可露出控件也不能黑屏） */
+.video-stage.video-fallback .intro-video {
+  opacity: 1;
+  z-index: 3;
+}
+
+.video-stage.video-fallback .intro-canvas {
+  display: none;
 }
 
 .video-stage video {
-  width: 2px;
-  height: 2px;
-  object-fit: contain;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
   background: #000;
 }
 
