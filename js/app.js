@@ -4,8 +4,9 @@
  */
 import * as THREE from '../vendor/three.module.min.js';
 import { createNoteTexture, noteLayout } from './cards.js';
-import { createConfetti, createStarfield, createAssemble, createNebulaField, createGalaxyBand, Smoke, Fireworks } from './particles.js';
-import { createCake } from './cake.js';
+import { createSparkField, createOrbitStreams, createAssemble, createNebulaField, createGalaxyBand, Smoke, Fireworks, setSparkTime, setSparkProjection } from './particles.js';
+import { createCake, CAKE_SIZE } from './cake.js';
+import { BloomComposer } from './postfx.js';
 
 const CFG = window.BIRTHDAY_CONFIG || {};
 const cards = CFG.cards || [{ short: '生日快乐', full: '生日快乐' }];
@@ -21,7 +22,7 @@ const isMobile = forceDevice ? /^(m|mobile|phone)$/i.test(forceDevice) : autoMob
 
 const NOTE_COUNT = isMobile ? 38 : 54;
 const HEART_SCALE = isMobile ? 2.62 : 3.30;
-const DPR_CAP = isMobile ? 1.75 : 2;
+const DPR_CAP = isMobile ? 1.5 : 2;
 
 const dom = {
   canvas: document.getElementById('scene'),
@@ -51,6 +52,7 @@ const dom = {
   photoClose: document.getElementById('photoClose'),
   blackout: document.getElementById('blackout'),
   videoStage: document.getElementById('videoStage'),
+  introCanvas: document.getElementById('introCanvas'),
   introVideo: document.getElementById('introVideo')
 };
 
@@ -72,18 +74,96 @@ const renderer = new THREE.WebGLRenderer({
 });
 renderer.setPixelRatio(Math.min(devicePixelRatio || 1, DPR_CAP));
 renderer.setClearColor(0x000000, 0);
+// 真实投影：托盘要有"蛋糕压上去"的明暗关系
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+/* 环境反射贴图：给托盘金属面一层"星空反射"（WebGL 里最接近光追观感的做法） */
+function makeEnvironment() {
+  const S = 512;
+  const c = document.createElement('canvas');
+  c.width = S;
+  c.height = S / 2;
+  const ctx = c.getContext('2d');
+
+  const g = ctx.createLinearGradient(0, 0, 0, c.height);
+  g.addColorStop(0, '#101a4a');
+  g.addColorStop(0.45, '#0b1130');
+  g.addColorStop(1, '#03040c');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, S, c.height);
+
+  // 几处高光斑：反射到托盘上会形成亮条
+  const blobs = [
+    ['rgba(180,210,255,.85)', 0.22, 0.30, 0.16],
+    ['rgba(255,190,220,.60)', 0.62, 0.22, 0.12],
+    ['rgba(255,215,150,.55)', 0.80, 0.42, 0.10],
+    ['rgba(140,255,240,.40)', 0.42, 0.55, 0.09]
+  ];
+  blobs.forEach(([color, cx, cy, rr]) => {
+    const rg = ctx.createRadialGradient(
+      cx * S, cy * c.height, 0,
+      cx * S, cy * c.height, rr * S
+    );
+    rg.addColorStop(0, color);
+    rg.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = rg;
+    ctx.fillRect(0, 0, S, c.height);
+  });
+
+  // 细星点
+  for (let i = 0; i < 260; i++) {
+    ctx.fillStyle = 'rgba(255,255,255,' + (0.15 + Math.random() * 0.5) + ')';
+    ctx.beginPath();
+    ctx.arc(Math.random() * S, Math.random() * c.height * 0.8, Math.random() * 1.4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.mapping = THREE.EquirectangularReflectionMapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  const rt = pmrem.fromEquirectangular(tex);
+  pmrem.dispose();
+  tex.dispose();
+  return rt.texture;
+}
 
 const scene = new THREE.Scene();
+scene.environment = makeEnvironment();
 const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 120);
 
+// 泛光后处理：参考画面那种"亮部溢出柔光 + 整体朦胧"的观感，靠这个才做得出来
+const bloom = new BloomComposer(renderer, scene, camera, isMobile
+  ? { threshold: 0.86, strength: 0.52, hazeAmount: 0.006, vignette: 0.46, renderScale: 0.80 }
+  : { threshold: 0.80, strength: 0.72, hazeAmount: 0.010, vignette: 0.44, renderScale: 1.0 });
+
 // ---------- 灯光 ----------
-scene.add(new THREE.AmbientLight(0xffffff, 1.15));
-const keyLight = new THREE.PointLight(0xffd9ef, 1.5, 30);
-keyLight.position.set(-4, 5, 8);
+// 暗环境 + 冷暖对比：原来 ambient 1.15 把所有面照得一样亮，蛋糕没有体积感
+scene.add(new THREE.AmbientLight(0x6f7fd0, 0.34));
+
+const keyLight = new THREE.PointLight(0xffd9ef, 4.2, 30, 2);
+keyLight.position.set(-4.5, 4.6, 6.8);
 scene.add(keyLight);
-const rimLight = new THREE.PointLight(0x9fd8ff, 1.1, 30);
-rimLight.position.set(5, -3, 6);
+
+// 轮廓光从右后方打，勾出蛋糕右缘与托盘边
+const rimLight = new THREE.PointLight(0x9fd8ff, 4.0, 26, 2);
+rimLight.position.set(4.8, 2.4, -1.8);
 scene.add(rimLight);
+
+// 顶部暖光：模拟烛光从上方压下来，照亮顶面与奶油边，并投出蛋糕在托盘上的影子
+const topLight = new THREE.SpotLight(0xffd8c0, 8, 18, 0.72, 0.55, 1.8);
+topLight.position.set(0.3, 6.4, 2.6);
+topLight.target.position.set(0, 0, 0);
+topLight.castShadow = true;
+topLight.shadow.mapSize.set(isMobile ? 512 : 1024, isMobile ? 512 : 1024);
+topLight.shadow.camera.near = 1;
+topLight.shadow.camera.far = 18;
+topLight.shadow.bias = -0.0016;
+topLight.shadow.radius = 3;
+scene.add(topLight);
+scene.add(topLight.target);
 
 // ---------- 便签爱心 ----------
 const layout = noteLayout(NOTE_COUNT, HEART_SCALE);
@@ -240,15 +320,17 @@ cake.add(beam);
 // ---------- 气球（独立于蛋糕，不随旋转） ----------
 const balloonColors = [0xff8fc7, 0xc9a7ff, 0xffd76e, 0x9fe8ff, 0xffa9a0];
 const balloons = [];
+// 气球必须始终高于这个高度（由 buildBalloons 按设备算出）
+let BALLOON_MIN_Y = 0;
 
 function createBalloon(color, x, y, z, scale) {
   const group = new THREE.Group();
   const mat = new THREE.MeshStandardMaterial({
     color,
-    roughness: 0.26,
-    metalness: 0.04,
+    roughness: 0.16,
+    metalness: 0.02,
     emissive: new THREE.Color(color),
-    emissiveIntensity: 0.22
+    emissiveIntensity: 0.48
   });
 
   const body = new THREE.Mesh(new THREE.SphereGeometry(0.3, 24, 20), mat);
@@ -266,32 +348,41 @@ function createBalloon(color, x, y, z, scale) {
 }
 
 function buildBalloons() {
-  const spread = isMobile ? 1.35 : 2.1;
-  // 每个气球：目标位置 + 屏幕外的绳子锚点
-  const spots = [
-    { x: -spread, y: 0.7, z: 0.35, s: 1.0, ax: -3.8, ay: -1.9, az: 0.9 },
-    { x: spread, y: 1.0, z: 0.15, s: 0.9, ax: 3.8, ay: -1.7, az: 0.8 },
-    { x: -spread * 0.78, y: 1.95, z: -0.5, s: 0.8, ax: -3.6, ay: 0.2, az: 0.5 },
-    { x: spread * 0.86, y: 2.05, z: -0.6, s: 0.74, ax: 3.6, ay: 0.5, az: 0.4 },
-    { x: -spread * 0.42, y: 2.6, z: -1.0, s: 0.62, ax: -1.4, ay: 5.0, az: -0.6 }
+  // 穿模的真实成因不是"三维距离不够"，而是**投影重叠**：
+  // 手机端蛋糕被整体放大 1.12 倍（托盘外沿 1.43），而竖屏可视半宽只有约 1.75，
+  // 气球根本没法靠"横向绕开"蛋糕；一旦气球中心和蛋糕顶面在同一高度，
+  // 近处的气球被透视放大后，屏幕上就压进蛋糕轮廓里。
+  // 所以判据改成垂直分离：所有气球整体浮在蛋糕顶面之上。
+  const TOP_Y = (isMobile ? 1.12 : 1.0) * (CAKE_SIZE.HEIGHT / 2 + CAKE_SIZE.CREAM_H);
+  const MIN_Y = TOP_Y + (isMobile ? 0.78 : 0.66); // 球半径 + 间隙 + 透视放大余量
+  BALLOON_MIN_Y = MIN_Y;
+
+  const raw = [
+    { x: -1.28, y: 1.95, z: 0.72, s: 0.95 },   // 左前
+    { x: 1.26, y: 2.18, z: 0.48, s: 0.90 },    // 右前
+    { x: -1.16, y: 2.55, z: -0.92, s: 0.82 },  // 左后
+    { x: 1.12, y: 2.72, z: -1.06, s: 0.76 },   // 右后
+    { x: -0.18, y: 3.20, z: -1.48, s: 0.64 }   // 正后高
   ];
+
+  const spots = raw.map(p => ({
+    x: p.x,
+    y: Math.max(MIN_Y, p.y),
+    z: p.z,
+    s: p.s,
+    // 绳子朝气球上方出画（原来锚点在下方，弦会横穿蛋糕）
+    ax: p.x * 1.75,
+    ay: p.y + 1.70,
+    az: p.z * 1.1 + 0.6
+  }));
 
   spots.forEach((s, i) => {
     const group = createBalloon(balloonColors[i % balloonColors.length], s.ax, s.ay, s.az, s.s);
     group.visible = false;
     scene.add(group);
 
-    // 绳子：从屏幕外锚点连到气球底部（细圆柱，比 Line 更明显）
-    const stringGeo = new THREE.CylinderGeometry(0.008, 0.008, 1, 6);
-    stringGeo.translate(0, 0.5, 0);
-    const string = new THREE.Mesh(stringGeo, new THREE.MeshBasicMaterial({
-      color: 0xffffff,
-      transparent: true,
-      opacity: 0.42,
-      depthWrite: false
-    }));
-    string.visible = false;
-    scene.add(string);
+    // 参考画面里的气球没有绳子（细白线横穿画面很像划痕），不建绳子节点
+    const string = null;
 
     balloons.push({
       group,
@@ -334,11 +425,36 @@ function popBalloon(b) {
 }
 
 // ---------- 粒子 ----------
-const confetti = createConfetti(isMobile ? 420 : 900, 14);
-confetti.visible = false;
-scene.add(confetti);
+// 星尘雾：几千颗小尺寸光点（大量 1px 级微尘 + 少量亮星），靠闪烁与景深出层次，
+// 不再用"彩色大圆点"那种卡通画法
+const stardust = createSparkField({
+  count: isMobile ? 5200 : 12000,
+  rMin: 1.9,
+  rMax: isMobile ? 15 : 19,
+  yScale: 0.92,
+  zOffset: -1.6,
+  sizeMin: 0.008,
+  sizeMax: isMobile ? 0.030 : 0.038,
+  drift: 0.10,
+  twinkleRate: 0.85,
+  colorMix: 0.34
+});
+stardust.visible = false;
+scene.add(stardust);
 
-const starfield = createStarfield(isMobile ? 900 : 2200);
+// 远景星点（更远、更暗、更慢）
+const starfield = createSparkField({
+  count: isMobile ? 1400 : 3200,
+  rMin: 13,
+  rMax: 40,
+  yScale: 0.8,
+  zOffset: -9,
+  sizeMin: 0.028,
+  sizeMax: 0.075,
+  drift: 0.035,
+  twinkleRate: 0.5,
+  colorMix: 0.20
+});
 starfield.visible = false;
 scene.add(starfield);
 
@@ -350,6 +466,16 @@ scene.add(nebulaField);
 const galaxyBand = createGalaxyBand(isMobile ? 520 : 900);
 galaxyBand.visible = false;
 scene.add(galaxyBand);
+
+// 环绕蛋糕的光流（静点再多也不如一条会跑的光流）
+const streams = createOrbitStreams({
+  orbits: 3,
+  perOrbit: isMobile ? 520 : 1000,
+  rBase: isMobile ? 1.40 : 1.62,
+  rStep: isMobile ? 0.34 : 0.42
+});
+streams.visible = false;
+scene.add(streams);
 
 const smoke = new Smoke(scene);
 const fireworks = new Fireworks(scene);
@@ -374,11 +500,21 @@ function fitCamera() {
   const dByH = heartH / (2 * tan);
   dHeart = Math.max(dByW, dByH);
 
-  const cakeW = isMobile ? 3.5 : 4.2;
-  const cakeH = isMobile ? 4.4 : 4.2;
+  // 取景高度要留够"蛋糕 + 奶油 + 蜡烛 + 火焰"的竖直空间，
+  // 否则桌面横屏下火苗顶部会被裁出画面（看起来就像"没有火焰"）
+  const cakeW = isMobile ? 3.9 : 4.8;
+  const cakeH = isMobile ? 5.2 : 5.6;
   const cByW = cakeW / (2 * tan * aspect);
   const cByH = cakeH / (2 * tan);
   dCake = Math.max(cByW, cByH);
+
+  // 点精灵的像素尺寸换算：drawingBuffer 高度 / (2*tan(fov/2))
+  // 光点大小必须跟随真实投影，否则换设备就变成"一片大圆点"
+  setSparkProjection((h * renderer.getPixelRatio()) / (2 * tan));
+
+  // 后处理的 RT 尺寸要跟真实 drawingBuffer 对齐
+  const dbs = renderer.getDrawingBufferSize(new THREE.Vector2());
+  bloom.setSize(dbs.x, dbs.y);
 
   // 相机位置统一由动画循环平滑跟随（fitCamera 只负责距离计算与投影更新）
 }
@@ -578,6 +714,70 @@ dom.modal.addEventListener('click', e => {
 });
 
 // ---------- 开场 ----------
+
+/* 开场视频画面：全部由 canvas 逐帧绘制
+ * 为什么不用 <video> 直接显示：只要 video 参与可见渲染，手机浏览器（iOS Safari、
+ * 安卓各家 WebView、微信内置浏览器）就可能在视频控件层上冒出进度条/播放按钮，
+ * ::-webkit-media-controls 那套 CSS 在被系统接管时不生效。
+ * 这里把 video 压成 2px 透明只当解码器，画面交给 canvas —— 浏览器没有可画控件的目标。
+ */
+let introRaf = 0;
+let introFrameCb = 0;
+
+function sizeIntroCanvas() {
+  const cv = dom.introCanvas;
+  if (!cv) return;
+  const dpr = Math.min(devicePixelRatio || 1, 2);
+  cv.width = Math.max(1, Math.round(innerWidth * dpr));
+  cv.height = Math.max(1, Math.round(innerHeight * dpr));
+  const ctx = cv.getContext('2d', { alpha: false });
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, cv.width, cv.height);
+}
+
+function stopIntroPaint() {
+  const v = dom.introVideo;
+  if (introFrameCb && v && v.cancelVideoFrameCallback) {
+    try { v.cancelVideoFrameCallback(introFrameCb); } catch (_) {}
+  }
+  introFrameCb = 0;
+  if (introRaf) { cancelAnimationFrame(introRaf); introRaf = 0; }
+}
+
+function scheduleIntroFrame() {
+  const v = dom.introVideo;
+  if (!v) return;
+  if (typeof v.requestVideoFrameCallback === 'function') {
+    introFrameCb = v.requestVideoFrameCallback(() => {
+      introFrameCb = 0;
+      paintIntroFrame();
+    });
+  } else {
+    introRaf = requestAnimationFrame(paintIntroFrame);
+  }
+}
+
+function paintIntroFrame() {
+  if (state !== 'video' || !dom.introVideo || !dom.introCanvas) return;
+  const v = dom.introVideo;
+  const cv = dom.introCanvas;
+  const ctx = cv.getContext('2d', { alpha: false });
+  const w = cv.width;
+  const h = cv.height;
+  const vw = v.videoWidth || 720;
+  const vh = v.videoHeight || 318;
+  if (vw > 0 && vh > 0) {
+    // 等价于 object-fit: cover —— 铺满、居中裁切
+    const k = Math.max(w / vw, h / vh);
+    const sw = w / k;
+    const sh = h / k;
+    try {
+      ctx.drawImage(v, (vw - sw) / 2, (vh - sh) / 2, sw, sh, 0, 0, w, h);
+    } catch (_) {}
+  }
+  scheduleIntroFrame();
+}
+
 function start() {
   if (state !== 'idle') return;
   state = 'video';
@@ -588,6 +788,10 @@ function start() {
   if (!v) { enterCakeAfterVideo(); return; }
 
   dom.videoStage.hidden = false;
+  sizeIntroCanvas();
+  stopIntroPaint();
+  // 视频本身静默，muted 让自动播放策略直接放行（画到 canvas 也不受手势限制）
+  try { v.muted = true; } catch (_) {}
   // 视频播放期间把 3D 停掉，GPU 全留给视频解码，避免卡顿
   dom.canvas.style.visibility = 'hidden';
   // 手势内先解锁音频元素，否则视频放完（11 秒后）音乐会被浏览器拦掉
@@ -596,12 +800,14 @@ function start() {
   const p = v.play();
   if (p && p.catch) p.catch(() => enterCakeAfterVideo());
   v.addEventListener('ended', enterCakeAfterVideo, { once: true });
+  scheduleIntroFrame();
 }
 
 // 视频结束后：进入星河蛋糕幕，这时才开始放背景音乐（不与视频声音重叠）
 function enterCakeAfterVideo() {
   if (state !== 'video') return;
   state = 'cake-pending';
+  stopIntroPaint();
   dom.videoStage.hidden = true;
   dom.canvas.style.visibility = '';
   const v = dom.introVideo;
@@ -633,12 +839,15 @@ function goCake() {
   cake.visible = true;
   cake.scale.setScalar(0.4);
   cake.position.y = -3;
-  confetti.visible = true;
+  stardust.visible = true;
   starfield.visible = true;
   nebulaField.visible = true;
   galaxyBand.visible = true;
+  streams.visible = true;
   bgReveal = 0;
-  starfield.material.opacity = 0;
+  stardust.userData.setOpacity(0);
+  starfield.userData.setOpacity(0);
+  streams.userData.setOpacity(0);
   galaxyBand.material.uniforms.uOpacity.value = 0;
   nebulaField.children.forEach(sp => { sp.material.opacity = 0; });
   assembleT = 0;
@@ -847,6 +1056,7 @@ function animate(now) {
   acc = 0;
 
   const t = now * 0.001;
+  setSparkTime(t);
 
   // 幕1：便签沿心形路径依次展开（像一笔画出来）
   if (heartGroup.visible) {
@@ -912,23 +1122,17 @@ function animate(now) {
     if (state === 'cake') {
       const f = 1 + Math.sin(t * 13) * 0.08 + Math.sin(t * 27) * 0.04;
       cakeData.flame.scale.set(1 + Math.sin(t * 9) * 0.04, f, 1 + Math.cos(t * 11) * 0.04);
-      cakeData.flame.position.x = Math.sin(t * 2.2) * 0.012;
+      cakeData.flame.position.x = (cakeData.flameX || 0) + Math.sin(t * 2.2) * 0.012;
       cakeData.flameLight.intensity = 4.2 + Math.sin(t * 17) * 0.6;
     }
 
     cakeData.ringA.rotation.z += dt * 0.06;
     cakeData.ringB.rotation.z -= dt * 0.04;
 
-    // 纸屑缓慢漂浮
-    const arr = confetti.geometry.attributes.position.array;
-    const base3 = confetti.userData.base;
-    for (let i = 0; i < arr.length; i += 3) {
-      arr[i] = base3[i] + Math.sin(t * 0.6 + base3[i + 1]) * 0.28;
-      arr[i + 1] = base3[i + 1] + Math.sin(t * 0.45 + base3[i]) * 0.3;
-      arr[i + 2] = base3[i + 2] + Math.cos(t * 0.5 + base3[i]) * 0.22;
-    }
-    confetti.geometry.attributes.position.needsUpdate = true;
-    confetti.rotation.y = t * 0.03;
+    // 星尘的漂移与闪烁全部在 shader 里算（CPU 不再逐点写 position），
+    // 这里只推进整体朝向，让万千光点跟着蛋糕一起缓缓转身
+    stardust.rotation.y = cakeYaw * 0.08 + t * 0.004;
+    streams.rotation.y = cakeYaw * 0.55;
   }
 
   smoke.update(dt);
@@ -942,9 +1146,12 @@ function animate(now) {
     for (let i = 0; i < nebulaField.children.length; i++) {
       const sp = nebulaField.children[i];
       sp.position.y = sp.userData.baseY + Math.sin(t * 0.18 + sp.userData.phase) * 0.9;
-      sp.material.opacity = (0.24 + Math.sin(t * 0.32 + i) * 0.07) * rv;
+      // 星云压淡：参考画面背景接近纯黑，大片彩色雾会把蛋糕衬得发灰
+      sp.material.opacity = (0.10 + Math.sin(t * 0.32 + i) * 0.035) * rv;
     }
-    starfield.material.opacity = 0.72 * rv;
+    stardust.userData.setOpacity(0.92 * rv);
+    starfield.userData.setOpacity(0.78 * rv);
+    streams.userData.setOpacity(0.90 * rv);
     galaxyBand.material.uniforms.uOpacity.value = 0.95 * rv;
     galaxyBand.rotation.y = t * 0.012 + cakeYaw * 0.32;
     galaxyBand.rotation.z = Math.sin(t * 0.06) * 0.05;
@@ -988,9 +1195,26 @@ function animate(now) {
         );
       }
     }
-    cakeData.ringA.rotation.y += dt * (cakeData.ringA.userData.speed || 0.3);
-    cakeData.ringB.rotation.y += dt * (cakeData.ringB.userData.speed || -0.2);
-    cakeData.ringC.rotation.y += dt * (cakeData.ringC.userData.speed || 0.14);
+    // 三条环绕光带：倾角缓缓摆动。
+    // 椭圆环绕 Y 轴旋转形状不变（看起来像静止），所以动的是倾角而不是转角
+    const rock = (m, i) => {
+      if (!m) return;
+      if (!m.userData.baseRot) {
+        m.userData.baseRot = { x: m.rotation.x, z: m.rotation.z };
+      }
+      m.rotation.x = m.userData.baseRot.x + Math.sin(t * 0.52 + i * 1.7) * 0.070;
+      m.rotation.z = m.userData.baseRot.z + Math.cos(t * 0.44 + i * 1.1) * 0.070;
+    };
+    rock(cakeData.ringA, 0);
+    rock(cakeData.ringB, 1);
+    rock(cakeData.ringC, 2);
+
+    cakeData.ringA.scale.setScalar(1 + Math.sin(t * 1.4) * 0.012);
+    cakeData.ringB.scale.setScalar(1 + Math.sin(t * 1.1 + 1) * 0.016);
+    // 大星芒：自转 + 呼吸
+    if (cakeData.bigStars && cakeData.bigStars.userData.update) {
+      cakeData.bigStars.userData.update(t);
+    }
     cakeData.ringA.scale.setScalar(1 + Math.sin(t * 1.4) * 0.012);
     cakeData.ringB.scale.setScalar(1 + Math.sin(t * 1.1 + 1) * 0.016);
     if (cakeData.dust && cakeData.dust.update) cakeData.dust.update(t);
@@ -1015,22 +1239,27 @@ function animate(now) {
       const gust = Math.sin(t * 0.24 + b.phase * 0.4) * 0.035;
       const swing = (Math.sin(t * 0.9 + b.phase) * 0.16 + Math.sin(t * 2.3 + b.phase * 1.6) * 0.05 + gust) * en;
       const pivot = 0.45 * sc;
-      const px = bx - Math.sin(swing) * pivot;
-      const py = by - (1 - Math.cos(swing)) * pivot + Math.sin(t * 0.85 + b.phase) * 0.06 * en;
+      let px = bx - Math.sin(swing) * pivot;
+      let py = by - (1 - Math.cos(swing)) * pivot + Math.sin(t * 0.85 + b.phase) * 0.06 * en;
       const pz = bz;
+
+      // 硬约束：入场、摆动、缩放任何时刻都不许落到蛋糕顶面以下，
+      // 否则透视放大后就会在屏幕上压进蛋糕
+      if (BALLOON_MIN_Y > 0 && py < BALLOON_MIN_Y) py = BALLOON_MIN_Y;
 
       b.group.position.set(px, py, pz);
       b.group.rotation.z = swing;
 
       // 绳子：锚点 → 气球底部（保持圆柱朝向下一个点）
       if (b.string) {
-        const bottom = new THREE.Vector3(px, py - 0.42 * sc, pz);
-        const dir = bottom.clone().sub(b.anchor);
+        // 线系在气球顶部，向上牵出画面
+        const tie = new THREE.Vector3(px, py + 0.46 * sc, pz);
+        const dir = tie.clone().sub(b.anchor);
         const len = dir.length();
         b.string.position.copy(b.anchor);
         b.string.scale.set(1, Math.max(0.001, len), 1);
         b.string.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize());
-        b.string.material.opacity = 0.42 * b.grow * Math.min(1, en * 2);
+        b.string.material.opacity = 0.14 * b.grow * Math.min(1, en * 2);
       }
     }
   }
@@ -1043,14 +1272,35 @@ function animate(now) {
   camera.position.y += (targetY - camera.position.y) * 0.1;
   camera.lookAt(0, 0, 0);
 
-  renderer.render(scene, camera);
+  // 蛋糕幕走泛光后处理（朦胧光感）；其余幕直接渲染，省掉一次 RT 链路
+  if (cake.visible) bloom.render();
+  else renderer.render(scene, camera);
 }
 
 // ---------- 尺寸 ----------
 let resizeTimer = null;
+
+// 调试钩子：本地排查用，不影响正式行为
+window.__DBG = () => ({
+  state,
+  assembleT: +assembleT.toFixed(3),
+  cakeScale: +cake.scale.x.toFixed(3),
+  cakeVis: cake.visible,
+  dCake: +dCake.toFixed(2),
+  camZ: +camera.position.z.toFixed(2),
+  isMobile,
+  balloons: balloons.map(b => ({
+    x: +b.group.position.x.toFixed(2),
+    y: +b.group.position.y.toFixed(2),
+    z: +b.group.position.z.toFixed(2)
+  }))
+});
 addEventListener('resize', () => {
   clearTimeout(resizeTimer);
-  resizeTimer = setTimeout(fitCamera, 120);
+  resizeTimer = setTimeout(() => {
+    fitCamera();
+    if (state === 'video') sizeIntroCanvas();
+  }, 120);
 });
 
 document.addEventListener('visibilitychange', () => {
