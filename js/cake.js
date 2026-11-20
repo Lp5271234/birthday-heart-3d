@@ -1213,26 +1213,36 @@ export function createCake() {
   plateRim.position.y = -HEIGHT / 2 - 0.012;
   group.add(plateRim);
 
-  /* ---------- 环绕光带：3 条倾斜发光环（参考图的立体环绕感） ----------
-     环的水平半径在 R*cos(倾角) ~ R 之间变化，取 R 让最小半径刚好贴住蛋糕外沿
-     （≈1.19），于是带子"贴着表面绕过去"：前段在蛋糕前、后段被蛋糕挡住 */
+  /* ---------- 环绕光带：4 条倾斜发光环（参考图的立体环绕感） ----------
+     环倾斜 θ 后：最小水平半径 = R*cos(θ)，最高点 = R*sin(θ)。
+     要"绕到蛋糕顶面上方"又"不穿进蛋糕"，两个条件同时满足：
+       R*cos(θ) > 蛋糕外沿(≈1.21) 且 R*sin(θ) > 顶面高度(≈0.83)
+     所以 R 取 1.50 上下、θ 取 0.6 左右 —— 这是唯一能贴着绕过去的角度组合 */
   const bandA = makeOrbitBand({
-    radius: 1.38, width: 0.075, speed: 0.34, opacity: 0.92,
-    colorA: '#ffffff', colorB: '#9fd0ff'
+    radius: 1.50, width: 0.110, speed: 0.34, opacity: 0.95,
+    colorA: '#ffffff', colorB: '#a8d4ff'
   });
-  bandA.rotation.set(0.42, 0, 0.14);
+  bandA.rotation.set(0.60, 0, 0.14);
   group.add(bandA);
 
   const bandB = makeOrbitBand({
-    radius: 1.56, width: 0.062, speed: -0.28, opacity: 0.80,
-    colorA: '#fff0d0', colorB: '#c9a7ff'
+    radius: 1.68, width: 0.090, speed: -0.28, opacity: 0.82,
+    colorA: '#fff4dd', colorB: '#c9a7ff'
   });
-  bandB.rotation.set(-0.36, 0.20, -0.18);
+  bandB.rotation.set(-0.52, 0.18, -0.16);
   group.add(bandB);
 
-  // 第三环贴着蜡烛绕（参考图里蜡烛周围就有一个小环）
+  // 第三条与前两条交叉，形成"漩涡"的交织感
+  const bandD = makeOrbitBand({
+    radius: 1.60, width: 0.075, speed: 0.45, opacity: 0.72,
+    colorA: '#eaf3ff', colorB: '#8fa8ff'
+  });
+  bandD.rotation.set(0.68, 0, -0.22);
+  group.add(bandD);
+
+  // 第四条贴着蜡烛绕（参考图里蜡烛周围就有一个小环）
   const bandC = makeOrbitBand({
-    radius: 0.60, width: 0.034, speed: 0.55, opacity: 0.85,
+    radius: 0.60, width: 0.040, speed: 0.55, opacity: 0.88,
     colorA: '#ffffff', colorB: '#cfe4ff'
   });
   bandC.position.set(candleX, candleTop + 0.10, 0.02);
@@ -1301,7 +1311,7 @@ export function createCake() {
   group.add(floorGlow);
 
   group.userData = {
-    ringA: bandA, ringB: bandB, ringC: bandC,
+    ringA: bandA, ringB: bandB, ringC: bandC, ringD: bandD,
     dust, flame, flameLight, nebula, colorDots, bigStars,
     flameX: candleX,
     candleTip: new THREE.Vector3(candleX, tipY, 0.02)
