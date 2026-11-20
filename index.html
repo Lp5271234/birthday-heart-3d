@@ -5,14 +5,23 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#f9e9f0">
 <meta name="color-scheme" content="light dark">
-<meta name="description" content="一份写给你的生日礼物：便签围成爱心，星河蛋糕等你吹蜡烛。">
-<title>生日快乐</title>
+<meta name="description" content="卢日培，生日快乐。点开这份小礼物。">
+<title>卢日培，生日快乐</title>
+<meta property="og:type" content="website">
+<meta property="og:title" content="卢日培，生日快乐">
+<meta property="og:description" content="点开这份小礼物，许个愿 🎂">
+<meta property="og:image" content="https://lp5271234.github.io/lrp-birthday/assets/share-cover.jpg">
+<meta property="og:image:width" content="640">
+<meta property="og:image:height" content="640">
+<meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ctext y='50' font-size='52'%3E%F0%9F%8E%82%3C/text%3E%3C/svg%3E">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <canvas id="scene"></canvas>
 <div class="bg-glow" aria-hidden="true"></div>
+<!-- 火光在空气里的散射（真正的朦胧感在 3D 场景里，这层只做极淡补强） -->
+<div class="haze" aria-hidden="true"></div>
 <div class="vignette" aria-hidden="true"></div>
 
 <p id="scriptWord" class="script-word" aria-hidden="true">生日快乐</p>
@@ -51,7 +60,7 @@
 </div>
 
 <div id="photoModal" class="modal photo-modal" hidden>
-  <div class="photo-card" role="dialog" aria-modal="true" aria-labelledby="photoCaption">
+  <div class="photo-card" role="dialog" aria-modal="true" aria-label="生日照片">
     <div class="photo-frame">
       <img id="photoImg" alt="生日照片" hidden>
       <div id="photoPlaceholder" class="photo-placeholder">
@@ -60,8 +69,6 @@
         <span class="ph-hint">把图片放进 assets/ 并在 config.js 填 photo</span>
       </div>
     </div>
-    <p id="photoCaption" class="photo-caption"></p>
-    <button class="modal-close" type="button" id="photoClose">收好</button>
   </div>
 </div>
 
