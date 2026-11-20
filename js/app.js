@@ -1208,9 +1208,11 @@ function animate(now) {
     rock(cakeData.ringA, 0);
     rock(cakeData.ringB, 1);
     rock(cakeData.ringC, 2);
+    rock(cakeData.ringD, 3);
 
     cakeData.ringA.scale.setScalar(1 + Math.sin(t * 1.4) * 0.012);
     cakeData.ringB.scale.setScalar(1 + Math.sin(t * 1.1 + 1) * 0.016);
+    if (cakeData.ringD) cakeData.ringD.scale.setScalar(1 + Math.sin(t * 1.7 + 2.2) * 0.018);
     // 大星芒：自转 + 呼吸
     if (cakeData.bigStars && cakeData.bigStars.userData.update) {
       cakeData.bigStars.userData.update(t);
