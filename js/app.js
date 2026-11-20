@@ -6,10 +6,11 @@ import * as THREE from '../vendor/three.module.min.js';
 import { createNoteTexture, noteLayout } from './cards.js';
 import { createSparkField, createOrbitStreams, createAssemble, createNebulaField, createGalaxyBand, Smoke, Fireworks, setSparkTime, setSparkProjection } from './particles.js';
 import { createCake, CAKE_SIZE } from './cake.js';
-import { BloomComposer } from './postfx.js';
 
 const CFG = window.BIRTHDAY_CONFIG || {};
 const cards = CFG.cards || [{ short: '生日快乐', full: '生日快乐' }];
+// 照片列表必须在这里就绪：气球数量由它决定（几张照片就几颗气球）
+const PHOTOS = (CFG.photos && CFG.photos.length) ? CFG.photos : [];
 
 const qs = new URLSearchParams(location.search);
 
@@ -22,7 +23,8 @@ const isMobile = forceDevice ? /^(m|mobile|phone)$/i.test(forceDevice) : autoMob
 
 const NOTE_COUNT = isMobile ? 38 : 54;
 const HEART_SCALE = isMobile ? 2.62 : 3.30;
-const DPR_CAP = isMobile ? 1.5 : 2;
+// DPR 直接决定填充率：2 倍像素在 1440p 上会让帧率腰斩，1.5 视觉几乎无差别
+const DPR_CAP = isMobile ? 1.35 : 1.5;
 
 const dom = {
   canvas: document.getElementById('scene'),
@@ -49,7 +51,7 @@ const dom = {
   photoImg: document.getElementById('photoImg'),
   photoPlaceholder: document.getElementById('photoPlaceholder'),
   photoCaption: document.getElementById('photoCaption'),
-  photoClose: document.getElementById('photoClose'),
+  photoClose: document.getElementById('photoClose'),  photoClose: document.getElementById('photoClose'),
   blackout: document.getElementById('blackout'),
   videoStage: document.getElementById('videoStage'),
   introCanvas: document.getElementById('introCanvas'),
@@ -74,8 +76,8 @@ const renderer = new THREE.WebGLRenderer({
 });
 renderer.setPixelRatio(Math.min(devicePixelRatio || 1, DPR_CAP));
 renderer.setClearColor(0x000000, 0);
-// 真实投影：托盘要有"蛋糕压上去"的明暗关系
-renderer.shadowMap.enabled = true;
+// 真实投影：托盘已有接触阴影贴图，实时阴影在桌面也关掉（省一整趟 shadow pass）
+renderer.shadowMap.enabled = false;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
 /* 环境反射贴图：给托盘金属面一层"星空反射"（WebGL 里最接近光追观感的做法） */
@@ -132,12 +134,10 @@ function makeEnvironment() {
 
 const scene = new THREE.Scene();
 scene.environment = makeEnvironment();
+// 雾：远景粒子随距离淡入背景色 —— 这才是"雨中隔着窗看灯"的那种朦胧，
+// 比后处理 bloom（高光溢出）更像雾气，而且没有额外渲染开销、不会闪黑框
+scene.fog = new THREE.Fog(0x1a1236, 9, 30);
 const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 120);
-
-// 泛光后处理：参考画面那种"亮部溢出柔光 + 整体朦胧"的观感，靠这个才做得出来
-const bloom = new BloomComposer(renderer, scene, camera, isMobile
-  ? { threshold: 0.86, strength: 0.52, hazeAmount: 0.006, vignette: 0.46, renderScale: 0.80 }
-  : { threshold: 0.80, strength: 0.72, hazeAmount: 0.010, vignette: 0.44, renderScale: 1.0 });
 
 // ---------- 灯光 ----------
 // 暗环境 + 冷暖对比：原来 ambient 1.15 把所有面照得一样亮，蛋糕没有体积感
@@ -357,13 +357,17 @@ function buildBalloons() {
   const MIN_Y = TOP_Y + (isMobile ? 0.78 : 0.66); // 球半径 + 间隙 + 透视放大余量
   BALLOON_MIN_Y = MIN_Y;
 
-  const raw = [
+  const rawAll = [
     { x: -1.28, y: 1.95, z: 0.72, s: 0.95 },   // 左前
     { x: 1.26, y: 2.18, z: 0.48, s: 0.90 },    // 右前
     { x: -1.16, y: 2.55, z: -0.92, s: 0.82 },  // 左后
     { x: 1.12, y: 2.72, z: -1.06, s: 0.76 },   // 右后
-    { x: -0.18, y: 3.20, z: -1.48, s: 0.64 }   // 正后高
+    { x: -0.18, y: 3.20, z: -1.48, s: 0.64 },  // 正后高
+    { x: 0.05, y: 3.05, z: 1.10, s: 0.58 }     // 正前高（照片多于 5 张时才用）
   ];
+  // 几张照片就几颗气球：多余的位置直接丢掉
+  const want = PHOTOS.length ? Math.min(rawAll.length, PHOTOS.length) : rawAll.length;
+  const raw = rawAll.slice(0, want);
 
   const spots = raw.map(p => ({
     x: p.x,
@@ -387,6 +391,7 @@ function buildBalloons() {
     balloons.push({
       group,
       string,
+      photoIndex: i,          // 点这颗气球弹出第 i 张照片
       anchor: new THREE.Vector3(s.ax, s.ay, s.az),
       target: new THREE.Vector3(s.x, s.y, s.z),
       baseY: s.y,
@@ -409,7 +414,7 @@ function popBalloon(b) {
   const p = b.group.position.clone();
   fireworks.burst(p, { color: b.color, count: isMobile ? 70 : 110, power: 1.0, ttl: 1.5 });
   fireworks.burst(p, { color: 0xffffff, count: 26, power: 0.6, ttl: 1.1, size: 0.08 });
-  openPhoto();
+  openPhoto(b.photoIndex);
   // 照片关掉后气球重新出现，可反复点
   const restore = () => {
     if (dom.photoModal.hidden) {
@@ -428,7 +433,7 @@ function popBalloon(b) {
 // 星尘雾：几千颗小尺寸光点（大量 1px 级微尘 + 少量亮星），靠闪烁与景深出层次，
 // 不再用"彩色大圆点"那种卡通画法
 const stardust = createSparkField({
-  count: isMobile ? 5200 : 12000,
+  count: isMobile ? 3200 : 7000,
   rMin: 1.9,
   rMax: isMobile ? 15 : 19,
   yScale: 0.92,
@@ -444,7 +449,7 @@ scene.add(stardust);
 
 // 远景星点（更远、更暗、更慢）
 const starfield = createSparkField({
-  count: isMobile ? 1400 : 3200,
+  count: isMobile ? 900 : 2200,
   rMin: 13,
   rMax: 40,
   yScale: 0.8,
@@ -511,10 +516,6 @@ function fitCamera() {
   // 点精灵的像素尺寸换算：drawingBuffer 高度 / (2*tan(fov/2))
   // 光点大小必须跟随真实投影，否则换设备就变成"一片大圆点"
   setSparkProjection((h * renderer.getPixelRatio()) / (2 * tan));
-
-  // 后处理的 RT 尺寸要跟真实 drawingBuffer 对齐
-  const dbs = renderer.getDrawingBufferSize(new THREE.Vector2());
-  bloom.setSize(dbs.x, dbs.y);
 
   // 相机位置统一由动画循环平滑跟随（fitCamera 只负责距离计算与投影更新）
 }
@@ -667,9 +668,11 @@ function openCard(note) {
   dom.modal.hidden = false;
 }
 
-// ---------- 点击蛋糕弹图片（图片在 config.js 里预留） ----------
-function openPhoto() {
-  const url = CFG.photo;
+// ---------- 点击气球弹图片（只显示照片，不带文字说明） ----------
+function openPhoto(index) {
+  const item = PHOTOS[index] || null;
+  const url = item ? item.src : CFG.photo;
+
   if (url) {
     dom.photoImg.src = url;
     dom.photoImg.alt = CFG.photoAlt || '生日照片';
@@ -679,14 +682,11 @@ function openPhoto() {
     dom.photoImg.hidden = true;
     dom.photoPlaceholder.hidden = false;
   }
-  dom.photoCaption.textContent = CFG.photoCaption || '';
   dom.photoModal.hidden = false;
 }
 
-dom.photoClose.addEventListener('click', () => { dom.photoModal.hidden = true; });
-dom.photoModal.addEventListener('click', e => {
-  if (e.target === dom.photoModal) dom.photoModal.hidden = true;
-});
+// 点任意位置关掉照片（卡片本身就是一张照片，没有多余控件）
+dom.photoModal.addEventListener('click', () => { dom.photoModal.hidden = true; });
 
 // ---------- 点击涟漪 ----------
 const ripples = [];
@@ -742,6 +742,27 @@ function stopIntroPaint() {
   }
   introFrameCb = 0;
   if (introRaf) { cancelAnimationFrame(introRaf); introRaf = 0; }
+}
+
+/**
+ * 兜底检测：少数机型（iOS 低电量模式、部分国产 WebView）即使 video 给足尺寸，
+ * 也可能拿不到可绘制的帧，canvas 就一直是黑的。这里采样画布中心，
+ * 若 1.6 秒后仍是纯黑，就退回"直接显示 video"（宁可露出原生控件也不能黑屏）。
+ */
+function introPaintWorks() {
+  const cv = dom.introCanvas;
+  if (!cv) return true;
+  try {
+    const ctx = cv.getContext('2d', { alpha: false });
+    const w = Math.max(4, Math.min(32, cv.width >> 3));
+    const h = Math.max(4, Math.min(32, cv.height >> 3));
+    const data = ctx.getImageData((cv.width - w) >> 1, (cv.height - h) >> 1, w, h).data;
+    let sum = 0;
+    for (let i = 0; i < data.length; i += 4) sum += data[i] + data[i + 1] + data[i + 2];
+    return sum > 40 * (data.length / 4);
+  } catch (_) {
+    return true; // 读不到像素就当作正常，避免误触发回退
+  }
 }
 
 function scheduleIntroFrame() {
@@ -801,6 +822,14 @@ function start() {
   if (p && p.catch) p.catch(() => enterCakeAfterVideo());
   v.addEventListener('ended', enterCakeAfterVideo, { once: true });
   scheduleIntroFrame();
+
+  // 播放 1.6 秒后检查 canvas 是否真的画出了画面，否则回退到直接显示 video
+  setTimeout(() => {
+    if (state === 'video' && !v.paused && !introPaintWorks()) {
+      dom.videoStage.classList.add('video-fallback');
+      stopIntroPaint();
+    }
+  }, 1600);
 }
 
 // 视频结束后：进入星河蛋糕幕，这时才开始放背景音乐（不与视频声音重叠）
@@ -808,6 +837,7 @@ function enterCakeAfterVideo() {
   if (state !== 'video') return;
   state = 'cake-pending';
   stopIntroPaint();
+  dom.videoStage.classList.remove('video-fallback');
   dom.videoStage.hidden = true;
   dom.canvas.style.visibility = '';
   const v = dom.introVideo;
@@ -903,6 +933,19 @@ function blowOut() {
 
   // 烟 + 烟花
   smoke.puff(new THREE.Vector3(0, cakeData.candleTip.y + 0.1, 0));
+
+  // 蛋糕表面浮现那行字
+  const textMesh = cakeData.cakeTextMesh;
+  if (textMesh) {
+    let tt = 0;
+    const showText = () => {
+      tt += 0.035;
+      textMesh.material.opacity = Math.min(1, tt) * 0.95;
+      if (tt < 1) requestAnimationFrame(showText);
+    };
+    showText();
+  }
+
   const palette = [0xff8fc7, 0xffd76e, 0x9fe8ff, 0xc9a7ff, 0xffffff];
   for (let i = 0; i < 5; i++) {
     setTimeout(() => {
@@ -1035,6 +1078,32 @@ dom.btnSound.addEventListener('click', () => {
 // ---------- 动画循环 ----------
 let last = performance.now();
 let acc = 0;
+
+/* ---------- 帧率自适应 ----------
+ * 低端机 / 微信内置浏览器跑不动时，逐级关掉最贵的层：
+ *   1 级：关后处理（泛光是 5 个额外 pass，最贵）
+ *   2 级：关背景远景粒子
+ *   3 级：把 DPR 降到 1
+ * 只在蛋糕幕采样（那是最重的一幕）。
+ */
+let bloomOff = false;   // 已弃用（后处理已移除），保留字段避免旧引用报错
+let degradeLevel = 0;
+let fpsSamples = [];
+
+function applyDegrade(level) {
+  if (level <= degradeLevel) return;
+  degradeLevel = level;
+  if (level >= 1) {
+    // 第一级：省掉 haze/rain 两层大面积模糊合成
+    document.body.classList.add('light-perf');
+  }
+  if (level >= 2) {
+    // 第二级：关远景粒子 + 降分辨率
+    if (starfield) starfield.visible = false;
+    if (nebulaField) nebulaField.visible = false;
+    try { renderer.setPixelRatio(1); fitCamera(); } catch (_) {}
+  }
+}
 
 function animate(now) {
   requestAnimationFrame(animate);
@@ -1217,6 +1286,8 @@ function animate(now) {
     if (cakeData.bigStars && cakeData.bigStars.userData.update) {
       cakeData.bigStars.userData.update(t);
     }
+    // 侧面的字是蛋糕表面的一部分：不做任何反向补偿，跟着蛋糕一起转
+    // （转到背面看不见是正常的，就像真的写在蛋糕上）
     cakeData.ringA.scale.setScalar(1 + Math.sin(t * 1.4) * 0.012);
     cakeData.ringB.scale.setScalar(1 + Math.sin(t * 1.1 + 1) * 0.016);
     if (cakeData.dust && cakeData.dust.update) cakeData.dust.update(t);
@@ -1274,9 +1345,21 @@ function animate(now) {
   camera.position.y += (targetY - camera.position.y) * 0.1;
   camera.lookAt(0, 0, 0);
 
-  // 蛋糕幕走泛光后处理（朦胧光感）；其余幕直接渲染，省掉一次 RT 链路
-  if (cake.visible) bloom.render();
-  else renderer.render(scene, camera);
+  // 直接渲染：不再走 RT 后处理，避免切 renderTarget 时偶发的黑框/撕裂
+  renderer.render(scene, camera);
+
+  // 帧率采样 + 逐级降级
+  if (cake.visible && degradeLevel < 2) {
+    fpsSamples.push(dtRaw);
+    if (fpsSamples.length > 90) fpsSamples.shift();
+    if (fpsSamples.length === 90) {
+      const avg = fpsSamples.reduce((a, b) => a + b, 0) / 90;
+      if (avg > 0 && 1 / avg < 42) {
+        applyDegrade(degradeLevel + 1);
+        fpsSamples.length = 0;
+      }
+    }
+  }
 }
 
 // ---------- 尺寸 ----------
@@ -1291,6 +1374,19 @@ window.__DBG = () => ({
   dCake: +dCake.toFixed(2),
   camZ: +camera.position.z.toFixed(2),
   isMobile,
+  degradeLevel,
+  bloomOff,
+  cakeText: cakeData && cakeData.cakeTextMesh
+    ? {
+        exists: true,
+        count: cakeData.cakeTextMesh.count,
+        opacity: +cakeData.cakeTextMesh.material.opacity.toFixed(3),
+        visible: cakeData.cakeTextMesh.visible
+      }
+    : { exists: false },
+  fps: fpsSamples.length
+    ? +(1 / (fpsSamples.reduce((a, b) => a + b, 0) / fpsSamples.length)).toFixed(1)
+    : null,
   balloons: balloons.map(b => ({
     x: +b.group.position.x.toFixed(2),
     y: +b.group.position.y.toFixed(2),
