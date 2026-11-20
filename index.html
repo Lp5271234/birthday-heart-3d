@@ -66,7 +66,10 @@
 </div>
 
 <div id="videoStage" class="video-stage" hidden>
-  <video id="introVideo" playsinline webkit-playsinline disablepictureinpicture
+  <!-- 画面由 canvas 逐帧绘制；video 只当解码器，压到 2px 透明放在角落，
+       这样手机浏览器没有任何机会画出原生进度条 -->
+  <canvas id="introCanvas" class="intro-canvas"></canvas>
+  <video id="introVideo" class="intro-video" playsinline webkit-playsinline muted disablepictureinpicture
          controlslist="nodownload nofullscreen noremoteplayback"
          preload="auto" src="assets/intro.mp4"></video>
 </div>
