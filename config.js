@@ -56,12 +56,24 @@ window.BIRTHDAY_CONFIG = {
   blowText: "吹蜡烛，许个愿",
   replayText: "再看一次",
 
-  /* ===== 预留：点蛋糕弹出的图片 =====
-   * 留空时点击蛋糕显示占位提示；
-   * 之后把图片放进站点目录（例如 assets/photo.jpg），这里填 "assets/photo.jpg"。
+  /* ===== 气球照片 =====
+   * 几张照片就对应几颗气球（气球数量由这里决定，多余的气球不会生成）；
+   * 点气球弹出对应那张，居中显示、约占手机屏 1/4。
+   * 图片放在 assets/photos/ 下。
    */
+  photos: [
+    { src: "assets/photos/photo1.jpg", caption: "本培出场，就是这个表情" },
+    { src: "assets/photos/photo2.jpg", caption: "笑起来比照片里好看" },
+    { src: "assets/photos/photo3.jpg", caption: "操场上的那个下午" },
+    { src: "assets/photos/photo4.jpg", caption: "别挡了，笑这么开心" }
+  ],
+
+  /* ===== 吹灭蜡烛后浮现在蛋糕表面的字 ===== */
+  cakeText: "卢日培其实是个乐子",
+
+  /* 兼容旧字段：留空时沿用上面的 photos */
   photo: "",
-  photoCaption: "这是我们的小秘密",
+  photoCaption: "",
   photoAlt: "生日照片",
 
   /* ===== 预留：背景音乐 =====
